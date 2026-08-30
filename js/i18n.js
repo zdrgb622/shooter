@@ -1,0 +1,107 @@
+const LANGS = [
+  { code: 'zh-Hant', label: '繁' },
+  { code: 'zh-Hans', label: '简' },
+  { code: 'en', label: 'EN' }
+];
+
+const STRINGS = {
+  'zh-Hant': {
+    docTitle: '星際戰機 STARDRIFT',
+    hint: '方向鍵 / WASD 移動 · 空白鍵射擊 · P 暫停 · 亦可用滑鼠拖住玩',
+    title: '星際戰機',
+    subtitle: 'S T A R D R I F T',
+    ctlMove: '方向鍵 / WASD  移動',
+    ctlShoot: '空白鍵  射擊（可長按）',
+    ctlPause: 'P  暫停',
+    drops: '黃色 P 加火力 · 藍色 S 加護盾 · 粉色 ♥ 加命',
+    bossInfo: '每 5 波有 BOSS',
+    start: '按空白鍵開始',
+    langLabel: '語言（按 L 切換）',
+    score: '分數',
+    high: '最高',
+    wave: 'WAVE',
+    power: 'POWER',
+    bossBanner: '⚠ BOSS 來襲',
+    paused: '已暫停',
+    resume: '按 P 繼續',
+    gameOver: 'GAME OVER',
+    finalScore: '分數 {n}',
+    reached: '打到第 {n} 波',
+    best: '最高紀錄 {n}',
+    restart: '按 R 重新開始'
+  },
+  'zh-Hans': {
+    docTitle: '星际战机 STARDRIFT',
+    hint: '方向键 / WASD 移动 · 空白键射击 · P 暂停 · 亦可用鼠标拖住玩',
+    title: '星际战机',
+    subtitle: 'S T A R D R I F T',
+    ctlMove: '方向键 / WASD  移动',
+    ctlShoot: '空白键  射击（可长按）',
+    ctlPause: 'P  暂停',
+    drops: '黄色 P 加火力 · 蓝色 S 加护盾 · 粉色 ♥ 加命',
+    bossInfo: '每 5 波有 BOSS',
+    start: '按空白键开始',
+    langLabel: '语言（按 L 切换）',
+    score: '分数',
+    high: '最高',
+    wave: 'WAVE',
+    power: 'POWER',
+    bossBanner: '⚠ BOSS 来袭',
+    paused: '已暂停',
+    resume: '按 P 继续',
+    gameOver: 'GAME OVER',
+    finalScore: '分数 {n}',
+    reached: '打到第 {n} 波',
+    best: '最高纪录 {n}',
+    restart: '按 R 重新开始'
+  },
+  en: {
+    docTitle: 'STARDRIFT',
+    hint: 'Arrow keys / WASD to move · Space to fire · P to pause · or drag with the mouse',
+    title: 'STARDRIFT',
+    subtitle: 'S P A C E   S H O O T E R',
+    ctlMove: 'Arrow keys / WASD  Move',
+    ctlShoot: 'Space  Fire (hold)',
+    ctlPause: 'P  Pause',
+    drops: 'P = firepower · S = shield · ♥ = extra life',
+    bossInfo: 'A BOSS every 5 waves',
+    start: 'PRESS SPACE TO START',
+    langLabel: 'Language (press L)',
+    score: 'SCORE',
+    high: 'BEST',
+    wave: 'WAVE',
+    power: 'POWER',
+    bossBanner: '⚠ BOSS INCOMING',
+    paused: 'PAUSED',
+    resume: 'Press P to resume',
+    gameOver: 'GAME OVER',
+    finalScore: 'Score {n}',
+    reached: 'Reached wave {n}',
+    best: 'Best {n}',
+    restart: 'PRESS R TO RESTART'
+  }
+};
+
+let lang = store.get('stardrift_lang');
+if (!STRINGS[lang]) lang = 'zh-Hant';
+
+const t = (key, n) => n === undefined ? STRINGS[lang][key] : STRINGS[lang][key].replace('{n}', n);
+
+function setLang(code) {
+  if (!STRINGS[code]) return;
+  lang = code;
+  store.set('stardrift_lang', code);
+  applyLang();
+}
+
+function cycleLang() {
+  const i = LANGS.findIndex(l => l.code === lang);
+  setLang(LANGS[(i + 1) % LANGS.length].code);
+}
+
+function applyLang() {
+  document.documentElement.lang = lang;
+  document.title = t('docTitle');
+  document.getElementById('hint').textContent = t('hint');
+}
+applyLang();

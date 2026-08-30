@@ -1,0 +1,28 @@
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+html, body {
+  height: 100%;
+  background: #05070f;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  font-family: "SF Mono", Menlo, Consolas, monospace;
+  color: #7b8db5;
+  overflow: hidden;
+  touch-action: none;
+}
+
+canvas {
+  height: min(96vh, 900px);
+  max-width: 96vw;
+  aspect-ratio: 480 / 720;
+  border-radius: 10px;
+  box-shadow: 0 0 0 1px #1d2a4a, 0 0 60px rgba(60, 120, 255, .18);
+  cursor: crosshair;
+  display: block;
+}
+
+#hint {
+  margin-top: 10px;
+  font-size: 12px;
+  letter-spacing: .5px;
+}
