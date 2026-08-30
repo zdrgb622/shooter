@@ -3,3 +3,6 @@ Thumbs.db
 node_modules/
 .vscode/
 .idea/
+
+# 本地開發筆記,唔上 GitHub
+NOTES.md
