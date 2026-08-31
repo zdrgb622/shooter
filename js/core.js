@@ -24,7 +24,7 @@ function newGame() {
   player = { x: W / 2, y: H - 110, r: 13, speed: 330, cool: 0, level: 1, lives: 3, shield: 0, inv: 2 };
   bullets = []; ebullets = []; enemies = []; powerups = []; particles = [];
   game = { state: 'title', paused: false, score: 0, wave: 0, queue: [], waveTime: 0, gap: 0,
-           bannerBoss: false, bannerT: 0, shake: 0 };
+           bannerBoss: false, bannerT: 0, shake: 0, clearShots: false };
 }
 newGame();
 

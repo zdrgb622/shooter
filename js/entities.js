@@ -108,7 +108,7 @@ function hitPlayer() {
     if (game.score > highScore) { highScore = game.score; store.set('stardrift_high', highScore); }
   } else {
     p.inv = 2.4; p.x = W / 2; p.y = H - 110;
-    ebullets.length = 0;
+    game.clearShots = true;
   }
 }
 
@@ -204,7 +204,7 @@ function updateBullets(dt) {
     if (b.y < -20 || b.x < -20 || b.x > W + 20) { bullets.splice(i, 1); continue; }
     for (let j = enemies.length - 1; j >= 0; j--) {
       const e = enemies[j];
-      if (dist2(b, e) < (b.r + e.r) ** 2) {
+      if (dist2(b, e) < (b.r + e.r) ** 2) { // when bullet hit enemy
         bullets.splice(i, 1);
         e.hp--; e.flash = 1;
         explode(b.x, b.y, '#cfe8ff', 4, 90);
@@ -213,11 +213,10 @@ function updateBullets(dt) {
       }
     }
   }
-  for (let i = ebullets.length - 1; i >= 0; i--) {
-    console.log(ebullets[i])
+  for (let i = ebullets.length - 1; i >= 0; i--) {  // iterate all bullets from enemy(ebullets)
     const b = ebullets[i];
-    b.x += b.vx * dt; b.y += b.vy * dt;
-    if (b.y > H + 20 || b.y < -40 || b.x < -30 || b.x > W + 30) { ebullets.splice(i, 1); continue; }
+    b.x += b.vx * dt; b.y += b.vy * dt; // moving ebullets
+    if (b.y > H + 20 || b.y < -40 || b.x < -30 || b.x > W + 30) { ebullets.splice(i, 1); continue; }  // when ebullets outside boundry
     if (player.inv <= 0 && dist2(b, player) < (b.r + player.r) ** 2) {
       ebullets.splice(i, 1);
       hitPlayer();
@@ -264,4 +263,7 @@ function update(dt) {
   updateEnemies(dt);
   updateBullets(dt);
   updatePowerups(dt);
+
+  // cleared out here, never inside hitPlayer(), so no loop is walking ebullets
+  if (game.clearShots) { ebullets.length = 0; game.clearShots = false; }
 }
