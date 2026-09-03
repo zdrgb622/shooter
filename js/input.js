@@ -21,10 +21,22 @@ function toCanvas(e) {
 const hitLangButton = () => langButtons.find(b =>
   pointer.x >= b.x && pointer.x <= b.x + b.w && pointer.y >= b.y && pointer.y <= b.y + b.h);
 
+const hitPause = () => pauseActive() &&
+  pointer.x >= pauseButton.x && pointer.x <= pauseButton.x + pauseButton.w &&
+  pointer.y >= pauseButton.y && pointer.y <= pauseButton.y + pauseButton.h;
+
 cv.addEventListener('pointerdown', e => {
   cv.setPointerCapture(e.pointerId);
   pointer.down = true;
   toCanvas(e);
+
+  // 要喺 playing 嘅 early return 之前處理,而且一定要放低 pointer.down ——
+  // 否則 updatePlayer 會見到 pointer.down 而令戰機飛去手指位置同時開火
+  if (hitPause()) {
+    game.paused = !game.paused;
+    pointer.down = false;
+    return;
+  }
   if (game.state === 'playing') return;
 
   const btn = hitLangButton();

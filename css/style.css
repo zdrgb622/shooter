@@ -12,8 +12,11 @@ html, body {
 }
 
 canvas {
-  height: min(96vh, 900px);
-  max-width: 96vw;
+  /* 由 width 決定尺寸,height 交給 aspect-ratio 推導,咁比例一定守得住。
+     寫死 height 再用 max-width 夾闊度,兩者一撞就會拉扯畫面(手機上見過)。
+     60vh 而唔係 64vh,係留返位畀下面嗰行提示,免得喺矮螢幕被切走。 */
+  width: min(96vw, 60vh, 600px);
+  height: auto;
   aspect-ratio: 480 / 720;
   border-radius: 10px;
   box-shadow: 0 0 0 1px #1d2a4a, 0 0 60px rgba(60, 120, 255, .18);
@@ -25,4 +28,12 @@ canvas {
   margin-top: 10px;
   font-size: 12px;
   letter-spacing: .5px;
+  max-width: min(96vw, 600px);
+  text-align: center;
+}
+
+/* 呢行提示講嘅全部係鍵盤操作,喺觸控裝置上冇意義,而且會橫向溢出。
+   問 pointer: coarse 而唔係螢幕闊度,因為要判斷嘅正正就係有冇鍵盤級輸入。 */
+@media (pointer: coarse) {
+  #hint { display: none; }
 }

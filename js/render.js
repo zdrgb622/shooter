@@ -28,6 +28,39 @@ function draw() {
   else langButtons.length = 0;
   if (game.state === 'over') drawOver();
   if (game.paused && game.state === 'playing') center(t('paused'), 28, '#cfe0ff', H / 2, t('resume'));
+  drawPauseButton();
+}
+
+// 60 座標 px 而唔係 44:手機上 canvas 被 CSS 縮到約 0.75,44 會變 33 真 px,細過觸控下限
+const pauseButton = { x: W - 68, y: 8, w: 60, h: 60 };
+
+// 個掣存唔存在由 game.state 決定,唔係由「畫過未」決定。
+// 如果攞繪圖時設嘅 flag 做判斷,輸入層就要靠繪圖層行過先 work —— 隱性依賴,好易踩。
+const pauseActive = () => game.state === 'playing';
+
+function drawPauseButton() {
+  if (!pauseActive()) return;
+
+  const { x, y, w, h } = pauseButton;
+  const hover = pointer.x !== null &&
+    pointer.x >= x && pointer.x <= x + w && pointer.y >= y && pointer.y <= y + h;
+
+  ctx.fillStyle = hover ? 'rgba(127,240,255,.14)' : 'rgba(8,13,28,.5)';
+  ctx.fillRect(x, y, w, h);
+  ctx.strokeStyle = 'rgba(127,240,255,.45)';
+  ctx.lineWidth = 1;
+  ctx.strokeRect(x + .5, y + .5, w - 1, h - 1);
+
+  const cx = x + w / 2, cy = y + h / 2;
+  ctx.fillStyle = '#cfe8ff';
+  if (game.paused) {
+    ctx.beginPath();
+    ctx.moveTo(cx - 7, cy - 11); ctx.lineTo(cx + 11, cy); ctx.lineTo(cx - 7, cy + 11);
+    ctx.closePath(); ctx.fill();
+  } else {
+    ctx.fillRect(cx - 9, cy - 11, 6, 22);
+    ctx.fillRect(cx + 3, cy - 11, 6, 22);
+  }
 }
 
 function drawBackground() {
@@ -147,9 +180,9 @@ function drawHUD() {
 
   ctx.textAlign = 'right';
   ctx.fillStyle = '#7ff0ff';
-  ctx.fillText(t('wave') + ' ' + game.wave, W - 12, 10);
+  ctx.fillText(t('wave') + ' ' + game.wave, W - 78, 10);
   ctx.fillStyle = '#ff7ba8';
-  ctx.fillText('♥'.repeat(Math.max(0, player.lives)), W - 12, 27);
+  ctx.fillText('♥'.repeat(Math.max(0, player.lives)), W - 78, 27);
 
   ctx.textAlign = 'center';
   ctx.fillStyle = '#ffd35c';
