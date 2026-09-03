@@ -2,6 +2,8 @@
 
 一個用純 HTML + CSS + JavaScript 寫嘅太空射擊小遊戲。冇框架、冇 build step、冇任何相依套件 —— 打開就玩得。
 
+開發過程遇到嘅問題同解決方法,記錄喺 [DEVLOG.md](DEVLOG.md)（英文)。
+
 ## 試玩
 
 直接 double-click `index.html`,或者去 GitHub Pages 版本。
