@@ -265,6 +265,18 @@ pointer and a fully pushed stick all take 0.92 s at a peak of 330 px/s. A
 half-pushed stick peaks at 165 px/s, diagonal keyboard movement stays at
 330 px/s, and the pointer stops within 0 px of its target.
 
+### Follow-up: equal was not the same as fair
+
+Capping the pointer at exactly the keyboard's speed was correct on paper but
+felt wrong in the hand. Keyboard input is a direction; pointer input is a
+destination, and a ship that trails behind a moving finger reads as lag.
+
+The fix kept the single rule and gave the pointer a larger ceiling instead of a
+separate code path: its intent may reach `POINTER_SPEED_MULT` (1.5) where
+keyboard and gamepad stop at 1. Every input still goes through the same speed
+stat, so a future speed upgrade applies to all of them, and the pointer still
+lands exactly on its target.
+
 ---
 
 ## Smaller fixes

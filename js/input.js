@@ -94,9 +94,12 @@ function pollGamepad() {
 }
 
 // ---------- 移動意圖 ----------
-// 所有輸入方式都只係交一個「想去邊個方向、幾大力」出嚟(長度 0 到 1),
-// 真正速度一律係 player.speed 乘佢。咁就冇一種輸入可以快過另一種,
-// 將來「跑快啲」能力改 player.speed,亦會對所有輸入同時生效。
+// 所有輸入方式都只係交一個「想去邊個方向、幾大力」出嚟,真正速度一律係 player.speed 乘佢,
+// 所以「跑快啲」能力改 player.speed 會對所有輸入同時生效。
+// 鍵盤同手掣長度最多 1;手指 / 滑鼠最多 POINTER_SPEED_MULT,
+// 因為要追住隻手指,用 1 會覺得戰機拖拖拉拉。要調手感就改呢個數。
+const POINTER_SPEED_MULT = 1.5;
+
 function moveIntent(p, dt) {
   let x = 0, y = 0;
   if (keys.ArrowLeft || keys.KeyA) x--;
@@ -113,9 +116,9 @@ function moveIntent(p, dt) {
   if (pointer.down && pointer.x !== null) {
     const dx = pointer.x - p.x, dy = pointer.y - 26 - p.y;
     const d = Math.hypot(dx, dy);
-    if (d < .5) return { x: 0, y: 0 };
+    if (d < .1) return { x: 0, y: 0 };
     // 就快到手指嗰陣行少啲,啱啱好停喺手指位,唔會衝過龍再兜返轉頭
-    const m = Math.min(1, d / (p.speed * dt));
+    const m = Math.min(POINTER_SPEED_MULT, d / (p.speed * dt));
     return { x: dx / d * m, y: dy / d * m };
   }
   return { x: 0, y: 0 };
