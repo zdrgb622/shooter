@@ -216,6 +216,57 @@ take over, and the push went through on the next try.
 
 ---
 
+## Dragging the ship was 12x faster than the keyboard
+
+Keyboard movement used a fixed speed of 330 px/s. Dragging with a finger or
+mouse used a different rule: each frame the ship closed a fixed fraction of the
+gap to the pointer.
+
+```js
+p.x += (pointer.x - p.x) * Math.min(1, dt * 14);
+```
+
+That feels smooth, but it has no speed limit. The further the pointer, the
+faster the ship. Simulated at 60 fps across 300 px:
+
+| Input | Time | Peak speed |
+|---|---|---|
+| Keyboard | 0.91 s | 330 px/s |
+| Finger / mouse | 0.32 s | 4200 px/s |
+
+It first showed up as "the phone version is easier", but the real split was
+pointer versus keyboard. A mouse on desktop had the same advantage.
+
+It also would have broken a planned "move faster" upgrade: the drag path
+never read the player's speed stat, so raising it would have done nothing for
+anyone playing by touch.
+
+### Fix
+
+Every input now only reports an *intent*: a direction with a length from 0 to 1.
+One line turns intent into motion, using the same speed for everyone:
+
+```js
+const move = moveIntent(p, dt);
+p.x += move.x * p.speed * dt;
+p.y += move.y * p.speed * dt;
+```
+
+For the pointer, the intent shrinks as the ship gets within one frame of the
+finger, so it lands exactly on the target instead of overshooting and
+oscillating. Gamepad support went through the same function, so an analogue
+stick pushed halfway moves at half speed, and adding it needed no new speed
+rules.
+
+### Verification
+
+Driving `updatePlayer()` frame by frame across the same 300 px: keyboard,
+pointer and a fully pushed stick all take 0.92 s at a peak of 330 px/s. A
+half-pushed stick peaks at 165 px/s, diagonal keyboard movement stays at
+330 px/s, and the pointer stops within 0 px of its target.
+
+---
+
 ## Smaller fixes
 
 - **Boss health bar overlapped the HUD.** It was drawn at the same height as

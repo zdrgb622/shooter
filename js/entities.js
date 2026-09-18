@@ -64,23 +64,13 @@ function updatePlayer(dt) {
   p.inv = Math.max(0, p.inv - dt);
   p.cool -= dt;
 
-  let dx = 0, dy = 0;
-  if (keys.ArrowLeft || keys.KeyA) dx--;
-  if (keys.ArrowRight || keys.KeyD) dx++;
-  if (keys.ArrowUp || keys.KeyW) dy--;
-  if (keys.ArrowDown || keys.KeyS) dy++;
-  if (dx || dy) {
-    const len = Math.hypot(dx, dy);
-    p.x += dx / len * p.speed * dt;
-    p.y += dy / len * p.speed * dt;
-  } else if (pointer.down && pointer.x !== null) {
-    p.x += (pointer.x - p.x) * Math.min(1, dt * 14);
-    p.y += (pointer.y - 26 - p.y) * Math.min(1, dt * 14);
-  }
+  const move = moveIntent(p, dt);
+  p.x += move.x * p.speed * dt;
+  p.y += move.y * p.speed * dt;
   p.x = clamp(p.x, p.r, W - p.r);
   p.y = clamp(p.y, p.r + 40, H - p.r);
 
-  if ((keys.Space || pointer.down) && p.cool <= 0) fire();
+  if (wantsFire() && p.cool <= 0) fire();
 }
 
 function fire() {
