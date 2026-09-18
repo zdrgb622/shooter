@@ -1,0 +1,8 @@
+{
+  "name": "stardrift",
+  "private": true,
+  "description": "Vanilla JS canvas shoot-em-up",
+  "scripts": {
+    "test": "node --test"
+  }
+}
