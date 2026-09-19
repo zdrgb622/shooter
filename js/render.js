@@ -32,7 +32,7 @@ function draw() {
 }
 
 // 60 座標 px 而唔係 44:手機上 canvas 被 CSS 縮到約 0.75,44 會變 33 真 px,細過觸控下限
-const pauseButton = { x: W - 68, y: 8, w: 60, h: 60 };
+const pauseButton = { x: W - 58, y: 8, w: 40, h: 30 };
 
 // 個掣存唔存在由 game.state 決定,唔係由「畫過未」決定。
 // 如果攞繪圖時設嘅 flag 做判斷,輸入層就要靠繪圖層行過先 work —— 隱性依賴,好易踩。
@@ -47,7 +47,7 @@ function drawPauseButton() {
 
   ctx.fillStyle = hover ? 'rgba(127,240,255,.14)' : 'rgba(8,13,28,.5)';
   ctx.fillRect(x, y, w, h);
-  ctx.strokeStyle = 'rgba(127,240,255,.45)';
+  ctx.strokeStyle = 'rgb(255, 0, 0)';
   ctx.lineWidth = 1;
   ctx.strokeRect(x + .5, y + .5, w - 1, h - 1);
 
