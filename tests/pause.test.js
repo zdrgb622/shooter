@@ -52,6 +52,22 @@ test('暫停時遊戲定格', () => {
   assert.equal(g.ebullets[0].y, y0);
 });
 
+test('暫停時唔會繼續震屏', () => {
+  const game = loadGame();
+  const { g } = game;
+  game.startClean();
+  g.shake(20);
+  assert.equal(g.shakeActive(), true, '未暫停時應該震緊');
+
+  game.key('KeyP');
+  assert.equal(g.shakeActive(), false, '暫停時唔應該再震');
+  game.step(60);
+  assert.equal(g.game.shake, 20, '暫停時 shake 亦唔會衰減,所以更加唔可以照搖');
+
+  game.key('KeyP');
+  assert.equal(g.shakeActive(), true, '恢復之後震返');
+});
+
 test('暫停連背景星星都停', () => {
   const game = loadGame();
   const { g } = game;

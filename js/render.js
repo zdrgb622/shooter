@@ -1,6 +1,10 @@
+// 暫停時唔可以搖:update() 停晒,game.shake 唔會衰減,
+// 再逐幀隨機位移就會永遠震落去。
+const shakeActive = () => game.shake > .3 && !game.paused;
+
 function draw() {
   ctx.save();
-  if (game.shake > .3) ctx.translate(rand(-game.shake, game.shake) * .35, rand(-game.shake, game.shake) * .35);
+  if (shakeActive()) ctx.translate(rand(-game.shake, game.shake) * .35, rand(-game.shake, game.shake) * .35);
 
   drawBackground();
   for (const p of particles) {
