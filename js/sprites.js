@@ -93,7 +93,7 @@ function drawShapes(shapes, fill, stroke, lineWidth) {
 }
 
 // ---------- BOSS:設計嘅「水晶核」(本地 300×180,中心 150,90) ----------
-// 排列「尖塔」、5 舊水晶、菱形核心,即係設計圖嘅預設。
+// 最終版設定:排列「原本」、5 舊水晶、菱形核心、12 粒環繞碎片,冇能量連線 / 裂紋 / 護盾。
 
 const BOSS_TONE = { body: '#132A3A', facet: '#0B1026', light: '#4FD1C5', edge: '#4FD1C5', core: '#EC6FA7' };
 
@@ -108,20 +108,34 @@ function crystal(bx, by, h, w, ang) {
   };
 }
 
+const BOSS_CORE_Y = 90;
+
 const BOSS_ART = (() => {
-  const specs = [{ bx: 150, by: 146, h: 176, w: 26, ang: 0, depth: 0 }];
+  // 「原本」排列:一舊大水晶企中間,兩邊一對對細啲嘅向外排
+  const pairs = [[59, 156, 126, 29, 2], [106, 146, 82, 17, 1], [138, 136, 58, 12, 1], [160, 128, 42, 9, 1]];
+  const specs = [{ bx: 150, by: 180, h: 180, w: 42, ang: 0, depth: 0 }];
   for (let j = 1; j < 5; j++) {
-    const side = j % 2 ? -1 : 1, k = Math.ceil(j / 2);
-    specs.push({ bx: 150 + side * k * 30, by: 148, h: Math.max(40, 124 - k * 26),
-                 w: Math.max(9, 19 - k * 3), ang: side * (10 + k * 9), depth: -k });
+    const side = j % 2 ? -1 : 1, k = Math.ceil(j / 2), q = pairs[Math.min(k, 4) - 1];
+    specs.push({ bx: 150 + side * q[0], by: q[1], h: q[2], w: q[3], ang: side * q[4], depth: -k });
   }
   specs.sort((a, b) => a.depth - b.depth);        // 由後排到前
 
-  const coreY = 136;
+  // 環繞碎片:喺核心周圍轉一圈,喺核心後面嘅排後邊,前面嘅排前邊
+  const back = [], front = [];
+  for (let i = 0; i < 12; i++) {
+    const a = i / 12 * Math.PI * 2 + .3;
+    const x = 150 + Math.cos(a) * 138, y = BOSS_CORE_Y + Math.sin(a) * 46, sz = 5 + (i % 3) * 2;
+    const shard = [[x, y - sz * 1.6], [x + sz * .7, y], [x, y + sz * 1.6], [x - sz * .7, y]];
+    (Math.sin(a) < 0 ? back : front).push(shard);
+  }
+
+  const z = 1.45;   // 「原本」排列嘅核心大過其他排列
   return {
     crystals: specs.map(q => crystal(q.bx, q.by, q.h, q.w, q.ang)),
-    core: [[150, coreY - 22], [166, coreY], [150, coreY + 22], [134, coreY]],
-    pupil: [[150, coreY - 9], [156, coreY], [150, coreY + 9], [144, coreY]],
+    shardsBack: back,
+    shardsFront: front,
+    core: [[150, BOSS_CORE_Y - 22 * z], [150 + 16 * z, BOSS_CORE_Y], [150, BOSS_CORE_Y + 22 * z], [150 - 16 * z, BOSS_CORE_Y]],
+    pupil: [[150, BOSS_CORE_Y - 9 * z], [150 + 6 * z, BOSS_CORE_Y], [150, BOSS_CORE_Y + 9 * z], [150 - 6 * z, BOSS_CORE_Y]],
   };
 })();
 
@@ -129,20 +143,25 @@ function drawBossArt(e) {
   ctx.save();
   const s = e.r * 2 / 190;            // 本地 300 闊,縮到差唔多兩個半徑
   ctx.scale(s, s);
-  ctx.translate(-150, -110);
+  ctx.translate(-150, -BOSS_CORE_Y);
 
+  drawShapes(BOSS_ART.shardsBack, BOSS_TONE.facet, BOSS_TONE.edge, 1);
   for (const k of BOSS_ART.crystals) {
     drawShapes([k.body], BOSS_TONE.body, BOSS_TONE.edge, 1.5);
     drawShapes([k.facet], BOSS_TONE.facet);
     drawShapes([k.light], BOSS_TONE.light);
   }
+
   // 核心跟住攻擊模式轉色,等玩家睇得出佢而家用緊邊招
   const coreColor = ['#EC6FA7', '#F2C94C', '#9B8BFF'][e.mode] || BOSS_TONE.core;
+  const pulse = 1 + Math.sin(e.t * 6) * .06;
   ctx.save();
-  ctx.translate(150, 136); ctx.scale(1 + Math.sin(e.t * 6) * .06, 1 + Math.sin(e.t * 6) * .06); ctx.translate(-150, -136);
+  ctx.translate(150, BOSS_CORE_Y); ctx.scale(pulse, pulse); ctx.translate(-150, -BOSS_CORE_Y);
   drawShapes([BOSS_ART.core], coreColor);
   drawShapes([BOSS_ART.pupil], BOSS_TONE.facet);
   ctx.restore();
+
+  drawShapes(BOSS_ART.shardsFront, BOSS_TONE.facet, BOSS_TONE.edge, 1);
 
   if (e.flash > 0) {
     ctx.globalAlpha = e.flash * .5;

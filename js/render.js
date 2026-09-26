@@ -24,10 +24,11 @@ function draw() {
   drawPauseButton();
 }
 
-// 設計圖係 44×44。但手機上 canvas 縮到約 0.75,44 座標 px 得 33 真 px,
-// 低過觸控下限,所以「撳得到嘅範圍」比「畫出嚟嘅框」四邊各闊 PAUSE_PAD。
-const pauseButton = { x: W - 60, y: 14, w: 44, h: 44 };
-const PAUSE_PAD = 8;
+// 最終版 HUD 整體 0.75,所以個掣畫 44 × 0.75 ≈ 36。
+// 但手機上 canvas 再縮約 0.75,36 座標 px 得 27 真 px,遠低過觸控下限,
+// 所以「撳得到嘅範圍」比「畫出嚟嘅框」四邊各闊 PAUSE_PAD:36 + 24 = 60 座標 px ≈ 45 真 px。
+const pauseButton = { x: W - 48, y: 12, w: 36, h: 36 };
+const PAUSE_PAD = 12;
 
 // 個掣存唔存在由 game.state 決定,唔係由「畫過未」決定。
 // 如果攞繪圖時設嘅 flag 做判斷,輸入層就要靠繪圖層行過先 work —— 隱性依賴,好易踩。
@@ -51,11 +52,11 @@ function drawPauseButton() {
   ctx.fillStyle = ART.hudText;
   if (game.paused) {
     ctx.beginPath();
-    ctx.moveTo(cx - 6, cy - 9); ctx.lineTo(cx + 9, cy); ctx.lineTo(cx - 6, cy + 9);
+    ctx.moveTo(cx - 5, cy - 7.5); ctx.lineTo(cx + 7.5, cy); ctx.lineTo(cx - 5, cy + 7.5);
     ctx.closePath(); ctx.fill();
   } else {
-    ctx.fillRect(cx - 6, cy - 9, 3.5, 18);
-    ctx.fillRect(cx + 2.5, cy - 9, 3.5, 18);
+    ctx.fillRect(cx - 5, cy - 7.5, 3, 15);
+    ctx.fillRect(cx + 2, cy - 7.5, 3, 15);
   }
   ctx.globalAlpha = 1;
 }
@@ -163,58 +164,58 @@ function drawPowerup(u) {
   ctx.restore();
 }
 
-// HUD 照設計圖:頂部一條半透明帶(晶體、連擊、波數、暫停掣,打 BOSS 時多一條血條),
-// 左下角一塊板(命同火力)。
-const bossOnScreen = () => enemies.some(e => e.type === 'boss');
+// HUD 照最終版設計:**冇底色**(設計嘅「HUD 底色深淺」係 0),整體大細 0.75,
+// 底部 0.825。頂部放晶體、連擊、波數同暫停掣,打 BOSS 時多一條血條;左下角放命同火力。
+const HUD_K = .75, HUD_BOT_K = .825;
+const bossOnScreen = () => enemies.find(e => e.type === 'boss');
 
 function drawHUD() {
-  const boss = bossOnScreen() ? enemies.find(e => e.type === 'boss') : null;
-  const stripH = boss ? 98 : 72;
-
-  ctx.fillStyle = ART.hudBg;
-  ctx.fillRect(0, 0, W, stripH);
-
+  const boss = bossOnScreen();
   ctx.textBaseline = 'top';
+
   const label = (text, x, align) => {
-    ctx.font = '11px "Chakra Petch", monospace';
+    ctx.font = `${Math.round(12 * HUD_K)}px "Chakra Petch", monospace`;
     ctx.textAlign = align;
     ctx.globalAlpha = .7; ctx.fillStyle = ART.hudText;
-    ctx.fillText(text, x, 14);
+    ctx.fillText(text, x, 12);
     ctx.globalAlpha = 1;
   };
-  const value = (text, x, align, color, size) => {
-    ctx.font = `700 ${size}px "Chakra Petch", monospace`;
+  const value = (text, x, align, color) => {
+    ctx.font = `700 ${Math.round(28 * HUD_K)}px "Chakra Petch", monospace`;
     ctx.textAlign = align;
     ctx.fillStyle = color;
-    ctx.fillText(text, x, 28);
+    ctx.fillText(text, x, 23);
   };
 
-  label(t('score'), 16, 'left');
-  value(game.crystals, 16, 'left', ART.hudText, 26);
+  label(t('score'), 12, 'left');
+  value(game.crystals, 12, 'left', ART.hudText);
 
   if (game.combo > 1) {
     label(t('combo'), W / 2, 'center');
-    value('x' + game.combo, W / 2, 'center', ART.hudHi, 26);
+    value('x' + game.combo, W / 2, 'center', ART.hudHi);
   }
 
-  label(t('wave'), W - 72, 'right');
-  value(game.wave, W - 72, 'right', ART.hudText, 20);
+  label(t('wave'), W - 66, 'right');
+  value(game.wave, W - 66, 'right', ART.hudText);
 
-  ctx.font = '11px "Chakra Petch", monospace';
+  ctx.font = `${Math.round(11 * HUD_K)}px "Chakra Petch", monospace`;
   ctx.textAlign = 'left';
   ctx.globalAlpha = .55; ctx.fillStyle = ART.hudText;
-  ctx.fillText(t('high') + ' ' + highScore, 16, 56);
+  ctx.fillText(t('high') + ' ' + highScore, 12, 46);
   ctx.globalAlpha = 1;
 
   if (boss) {
     const pct = clamp(boss.hp / boss.maxhp, 0, 1);
-    ctx.font = '700 11px "Chakra Petch", monospace';
+    const y = 60, h = Math.round(8 * HUD_K);
+    ctx.font = `700 ${Math.round(12 * HUD_K)}px "Chakra Petch", monospace`;
+    ctx.textAlign = 'left';
     ctx.fillStyle = ART.eLight;
-    ctx.fillText('BOSS', 16, 78);
+    ctx.fillText('CRYSTAL CORE', 12, y - 2);
+    const barX = 108;
     ctx.fillStyle = 'rgba(255,255,255,.12)';
-    ctx.fillRect(58, 78, W - 74, 8);
+    ctx.fillRect(barX, y, W - barX - 12, h);
     ctx.fillStyle = ART.eLight;
-    ctx.fillRect(58, 78, (W - 74) * pct, 8);
+    ctx.fillRect(barX, y, (W - barX - 12) * pct, h);
   }
 
   drawBottomPanel();
@@ -227,23 +228,19 @@ function drawHUD() {
 }
 
 function drawBottomPanel() {
-  const lives = Math.max(0, player.lives);
-  const wide = Math.max(lives * 18, 5 * 12) + 20;
-  const x = 12, y = H - 62;
+  const x = 14, y = H - 46;
+  const heart = Math.round(18 * HUD_BOT_K), gap = Math.round(20 * HUD_BOT_K);
 
-  ctx.fillStyle = ART.hudBg;
-  ctx.fillRect(x, y, wide, 50);
-
-  ctx.font = '15px "Chakra Petch", monospace';
+  ctx.font = `${heart}px "Chakra Petch", monospace`;
   ctx.textAlign = 'left';
   ctx.textBaseline = 'top';
   ctx.fillStyle = ART.pAccent;
-  for (let i = 0; i < lives; i++) ctx.fillText('♥', x + 10 + i * 18, y + 8);
+  for (let i = 0; i < Math.max(0, player.lives); i++) ctx.fillText('♥', x + i * gap, y);
 
+  const bw = Math.round(10 * HUD_BOT_K), bh = Math.round(9 * HUD_BOT_K), bgap = bw + 3;
   for (let i = 0; i < 5; i++) {
-    const on = i < player.level;
-    ctx.fillStyle = on ? ART.hudHi : 'rgba(232,236,255,.18)';
-    ctx.fillRect(x + 10 + i * 12, y + 32, 8, 10);
+    ctx.fillStyle = i < player.level ? ART.hudHi : 'rgba(232,236,255,.18)';
+    ctx.fillRect(x + i * bgap, y + heart + 6, bw, bh);
   }
 }
 
