@@ -22,6 +22,19 @@ test('打完 BOSS 波會開能力選擇,唔係 BOSS 波就直接開下一波', (
   assert.equal(game2.g.game.wave, 5, '普通波之後直接開下一波');
 });
 
+test('BOSS 一死即刻彈能力畫面,唔使等間場', () => {
+  const game = loadGame();
+  const { g } = game;
+  game.startClean();
+  game.run('game.wave = 5; enemies.length = 0; spawnEnemy("boss");');
+  const boss = g.enemies[0];
+  boss.hp = 1;
+  boss.y = 200;
+  g.bullets.push({ x: boss.x, y: boss.y, vx: 0, vy: 0, r: 4 });
+  g.updateBullets(1 / 60);
+  assert.equal(g.game.state, 'picking', 'BOSS 死嗰一刻就應該彈出嚟');
+});
+
 test('揀能力嗰陣遊戲定格', () => {
   const game = loadGame();
   const { g } = game;

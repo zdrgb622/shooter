@@ -52,6 +52,21 @@ test('暫停時遊戲定格', () => {
   assert.equal(g.ebullets[0].y, y0);
 });
 
+test('暫停連背景星星都停', () => {
+  const game = loadGame();
+  const { g } = game;
+  game.startClean();
+  game.step(5);
+  const before = g.stars.map(s => s.y);
+  game.key('KeyP');
+  game.step(30);
+  assert.deepEqual(g.stars.map(s => s.y), before, '暫停時星星唔應該再飄');
+
+  game.key('KeyP');
+  game.step(5);
+  assert.notDeepEqual(g.stars.map(s => s.y), before, '恢復之後要再飄返');
+});
+
 test('P 同 Escape 都可以暫停 / 恢復', () => {
   const game = loadGame();
   const { g } = game;

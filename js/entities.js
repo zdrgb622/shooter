@@ -187,6 +187,9 @@ function killEnemy(e, i, scored = true) {
   }
   if (boss) {
     drop(e.x - 26, e.y, 'power'); drop(e.x + 26, e.y, 'shield'); drop(e.x, e.y, 'life');
+    // BOSS 一死就即刻揀能力,唔使等 updateWave 嗰 1.2 秒間場。
+    // 爆炸粒子喺閘之上更新,所以揀嘢期間 BOSS 仍然爆緊,唔會突然靜晒。
+    if (game.wave % PICK_EVERY === 0) openPicker();
   } else {
     const r = Math.random();
     if (r < .1) drop(e.x, e.y, 'power');
@@ -247,6 +250,8 @@ function updatePowerups(dt) {
 
 // ---------- 每幀更新 ----------
 function update(dt) {
+  if (game.paused) return;   // 暫停:連背景星星同粒子都唔郁,成個畫面定格
+
   for (const s of stars) { s.y += s.v * dt; if (s.y > H) { s.y = -2; s.x = rand(0, W); } }
   for (let i = particles.length - 1; i >= 0; i--) {
     const p = particles[i];
@@ -255,11 +260,11 @@ function update(dt) {
   }
   game.shake = Math.max(0, game.shake - dt * 45);
   if (game.bannerT > 0) game.bannerT -= dt;
-  if (game.state === 'playing' && !game.paused && game.combo > 0) {
+  if (game.state === 'playing' && game.combo > 0) {
     game.comboT -= dt;
     if (game.comboT <= 0) { game.combo = 0; game.comboT = 0; }
   }
-  if (game.state !== 'playing' || game.paused) return;
+  if (game.state !== 'playing') return;
 
   updatePlayer(dt);
   updateWave(dt);
