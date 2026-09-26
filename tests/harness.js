@@ -19,7 +19,7 @@ function fakeContext2d() {
   return new Proxy({}, {
     get: (_, key) => {
       if (key === 'measureText') return () => ({ width: 0 });
-      if (key === 'createLinearGradient') return () => ({ addColorStop: noop });
+      if (key === 'createLinearGradient' || key === 'createRadialGradient') return () => ({ addColorStop: noop });
       return noop;
     },
     set: () => true,

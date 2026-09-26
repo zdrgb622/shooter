@@ -91,3 +91,101 @@ function drawShapes(shapes, fill, stroke, lineWidth) {
   if (fill) { ctx.fillStyle = fill; ctx.fill(); }
   if (stroke) { ctx.strokeStyle = stroke; ctx.lineWidth = lineWidth || 1.6; ctx.lineJoin = 'round'; ctx.stroke(); }
 }
+
+// ---------- 背景(設計嘅「行星」款) ----------
+// 設計用 SVG turbulence filter 整星雲,canvas 冇呢樣,用徑向漸層近似。
+// 星星就繼續用 core.js 嗰批會飄嘅,靜態星星喺遊戲入面冇速度感。
+
+const BG = {
+  planet: '#2A3A6E', ring: '#4FD1C5', neb: '114, 36, 62', deep: '#0B1026',
+  rot: -18 * Math.PI / 180,
+};
+
+function drawSpace() {
+  ctx.fillStyle = BG.deep;
+  ctx.fillRect(-30, -30, W + 60, H + 60);
+
+  // 星雲
+  const g = ctx.createRadialGradient(400, 230, 0, 400, 230, 210);
+  g.addColorStop(0, `rgba(${BG.neb}, .5)`);
+  g.addColorStop(1, `rgba(${BG.neb}, 0)`);
+  ctx.fillStyle = g;
+  ctx.fillRect(160, 20, 480, 420);
+
+  // 行星環:外圈減內圈,中間鏤空
+  ctx.globalAlpha = .8;
+  ctx.fillStyle = BG.ring;
+  ctx.beginPath();
+  ctx.ellipse(40, H - 60, 300, 60, BG.rot, 0, Math.PI * 2);
+  ctx.ellipse(40, H - 60, 250, 44, BG.rot, 0, Math.PI * 2);
+  ctx.fill('evenodd');
+  ctx.globalAlpha = 1;
+
+  // 行星本體 + 陰影
+  ctx.fillStyle = BG.planet;
+  ctx.beginPath(); ctx.arc(40, H - 60, 190, 0, Math.PI * 2); ctx.fill();
+  ctx.globalAlpha = .55;
+  ctx.fillStyle = BG.deep;
+  ctx.beginPath(); ctx.ellipse(90, H - 100, 170, 190, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.globalAlpha = 1;
+}
+
+// ---------- BOSS:設計嘅「水晶核」(本地 300×180,中心 150,90) ----------
+// 排列「尖塔」、5 舊水晶、菱形核心,即係設計圖嘅預設。
+
+const BOSS_TONE = { body: '#132A3A', facet: '#0B1026', light: '#4FD1C5', edge: '#4FD1C5', core: '#EC6FA7' };
+
+function crystal(bx, by, h, w, ang) {
+  const r = ang * Math.PI / 180, cs = Math.cos(r), sn = Math.sin(r);
+  const T = (x, y) => [bx + x * cs - y * sn, by + x * sn + y * cs];
+  const tip = T(0, -h), rr = T(w, -h / 2), bot = T(0, 0), ll = T(-w, -h / 2);
+  return {
+    body: [tip, rr, bot, ll],
+    facet: [tip, bot, ll],
+    light: [T(0, -h * .97), T(w * .19, -h * .78), T(w * .05, -h * .78)],
+  };
+}
+
+const BOSS_ART = (() => {
+  const specs = [{ bx: 150, by: 146, h: 176, w: 26, ang: 0, depth: 0 }];
+  for (let j = 1; j < 5; j++) {
+    const side = j % 2 ? -1 : 1, k = Math.ceil(j / 2);
+    specs.push({ bx: 150 + side * k * 30, by: 148, h: Math.max(40, 124 - k * 26),
+                 w: Math.max(9, 19 - k * 3), ang: side * (10 + k * 9), depth: -k });
+  }
+  specs.sort((a, b) => a.depth - b.depth);        // 由後排到前
+
+  const coreY = 136;
+  return {
+    crystals: specs.map(q => crystal(q.bx, q.by, q.h, q.w, q.ang)),
+    core: [[150, coreY - 22], [166, coreY], [150, coreY + 22], [134, coreY]],
+    pupil: [[150, coreY - 9], [156, coreY], [150, coreY + 9], [144, coreY]],
+  };
+})();
+
+function drawBossArt(e) {
+  ctx.save();
+  const s = e.r * 2 / 190;            // 本地 300 闊,縮到差唔多兩個半徑
+  ctx.scale(s, s);
+  ctx.translate(-150, -110);
+
+  for (const k of BOSS_ART.crystals) {
+    drawShapes([k.body], BOSS_TONE.body, BOSS_TONE.edge, 1.5);
+    drawShapes([k.facet], BOSS_TONE.facet);
+    drawShapes([k.light], BOSS_TONE.light);
+  }
+  // 核心跟住攻擊模式轉色,等玩家睇得出佢而家用緊邊招
+  const coreColor = ['#EC6FA7', '#F2C94C', '#9B8BFF'][e.mode] || BOSS_TONE.core;
+  ctx.save();
+  ctx.translate(150, 136); ctx.scale(1 + Math.sin(e.t * 6) * .06, 1 + Math.sin(e.t * 6) * .06); ctx.translate(-150, -136);
+  drawShapes([BOSS_ART.core], coreColor);
+  drawShapes([BOSS_ART.pupil], BOSS_TONE.facet);
+  ctx.restore();
+
+  if (e.flash > 0) {
+    ctx.globalAlpha = e.flash * .5;
+    drawShapes(BOSS_ART.crystals.map(k => k.body), '#fff');
+    ctx.globalAlpha = 1;
+  }
+  ctx.restore();
+}

@@ -1,10 +1,3 @@
-const HULL = {
-  grunt: [[0, 16], [15, -6], [6, -14], [-6, -14], [-15, -6]],
-  darter: [[0, 15], [10, -13], [0, -7], [-10, -13]],
-  gunner: [[-20, -10], [20, -10], [13, 14], [-13, 14]],
-  boss: [[0, 46], [50, 10], [40, -26], [16, -36], [-16, -36], [-40, -26], [-50, 10]]
-};
-
 function draw() {
   ctx.save();
   if (game.shake > .3) ctx.translate(rand(-game.shake, game.shake) * .35, rand(-game.shake, game.shake) * .35);
@@ -68,10 +61,7 @@ function drawPauseButton() {
 }
 
 function drawBackground() {
-  const g = ctx.createLinearGradient(0, 0, 0, H);
-  g.addColorStop(0, '#070b1a'); g.addColorStop(.55, '#050813'); g.addColorStop(1, '#0b0718');
-  ctx.fillStyle = g;
-  ctx.fillRect(-30, -30, W + 60, H + 60);
+  drawSpace();
 
   for (const s of stars) {
     ctx.fillStyle = ['#2c3a63', '#5a6da0', '#c7d6ff'][s.z];
@@ -149,20 +139,7 @@ function drawEnemy(e) {
     }
     ctx.restore();
   } else {
-    // BOSS 仲係用舊形狀,設計圖嘅「水晶核」未做
-    ctx.beginPath();
-    HULL[e.type].forEach(([x, y], i) => i ? ctx.lineTo(x, y) : ctx.moveTo(x, y));
-    ctx.closePath();
-    ctx.shadowBlur = 14; ctx.shadowColor = e.color;
-    ctx.fillStyle = e.color; ctx.fill();
-    if (e.flash > 0) {
-      ctx.globalAlpha = e.flash * .55; ctx.fillStyle = '#fff'; ctx.fill(); ctx.globalAlpha = 1;
-    }
-    ctx.shadowBlur = 0;
-    ctx.fillStyle = '#2a0512';
-    ctx.beginPath(); ctx.arc(0, -2, 20, 0, 7); ctx.fill();
-    ctx.fillStyle = ['#ff5470', '#ffb35c', '#9b8bff'][e.mode];
-    ctx.beginPath(); ctx.arc(0, -2, 11 + Math.sin(e.t * 6) * 2, 0, 7); ctx.fill();
+    drawBossArt(e);
   }
   ctx.restore();
 }
