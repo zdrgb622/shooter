@@ -20,11 +20,26 @@ const store = {
 let player, bullets, ebullets, enemies, powerups, particles, game;
 let highScore = +(store.get('stardrift_high') || 0);
 
+// 測試用:想一開波就去第幾波,改呢個數就得,例如 20(5 嘅倍數係 BOSS 波)。
+// 正常玩要係 1,試完記得改返先好 commit —— npm test 會提你。
+const START_WAVE = 1;
+
+// 連擊:連續打死敵機而冇中彈就累積,倍數直接乘晶體收入。
+// COMBO_WINDOW 秒內冇再殺嘢就斷;中彈即刻清零。
+const PICK_EVERY = 5;        // 每幾波揀一次能力(而家同 BOSS 波一致)
+const COMBO_WINDOW = 3;      // 幾耐冇擊殺就斷(秒)
+const COMBO_STEP = .02;      // 每一個連擊加幾多倍
+const COMBO_MAX = 50;        // 連擊數上限,即最高 1 + 50 × .02 = 2 倍
+
 function newGame() {  // set up a new game or restart
-  player = { x: W / 2, y: H - 110, r: 13, speed: 440, cool: 0, level: 1, lives: 3, shield: 0, inv: 2 };
+  player = { x: W / 2, y: H - 110, r: 13, speed: 440, cool: 0, level: 1, lives: 3, shield: 0, inv: 2,
+             abilities: {},      // { 能力 id: 等級 },每局清零
+             fireRateMult: 1,    // 能力改射速用,1 = 原速
+             magnet: 0 };        // 能力改執道具範圍用,0 = 原本
   bullets = []; ebullets = []; enemies = []; powerups = []; particles = [];
-  game = { state: 'title', paused: false, score: 0, wave: 0, queue: [], waveTime: 0, gap: 0,
-           bannerBoss: false, bannerT: 0, shake: 0, clearShots: false };
+  game = { state: 'title', paused: false, crystals: 0, combo: 0, comboT: 0,
+           wave: 0, queue: [], waveTime: 0, gap: 0,
+           bannerBoss: false, bannerT: 0, shake: 0, clearShots: false, rerolls: 0 };
 }
 newGame();
 
@@ -43,3 +58,6 @@ function explode(x, y, color, n, spread = 260) {  // explosion in (x, y)
 }
 
 const shake = n => game.shake = Math.max(game.shake, n);
+
+// 連擊倍數。1 倍起,連擊越多越高,到 COMBO_MAX 封頂
+const comboMult = () => 1 + Math.min(game.combo, COMBO_MAX) * COMBO_STEP;

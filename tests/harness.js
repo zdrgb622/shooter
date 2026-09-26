@@ -10,7 +10,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 
 const ROOT = path.join(__dirname, '..');
-const SCRIPTS = ['core', 'i18n', 'input', 'entities', 'render', 'main'];
+const SCRIPTS = ['core', 'i18n', 'abilities', 'sprites', 'input', 'entities', 'render', 'ui', 'main'];
 
 const noop = () => {};
 
@@ -116,13 +116,20 @@ function loadGame() {
     },
     unplugGamepad() { gamepads.length = 0; },
 
-    // 開一局,清走所有敵人同子彈,戰機放喺已知位置 —— 大部分測試嘅起點
+    // 開一局,清走所有敵人同子彈,戰機放喺已知狀態 —— 大部分測試嘅起點。
+    // 命、護盾、火力都明確設定,唔靠遊戲嘅預設值:
+    // 咁調數(例如試玩時將 shield 調高)就唔會令一堆測試無端端紅。
     startClean() {
       run(`
         startRun();
         enemies.length = 0; game.queue.length = 0;
         bullets.length = 0; ebullets.length = 0; powerups.length = 0;
-        player.x = W / 2; player.y = H - 110; player.inv = 0;
+        player.x = W / 2; player.y = H - 110;
+        player.inv = 0; player.lives = 3; player.shield = 0; player.level = 1;
+        player.abilities = {}; player.fireRateMult = 1; player.magnet = 0;
+        player.speed = 440;
+        game.crystals = 0; game.combo = 0; game.comboT = 0;
+        game.wave = 1; game.gap = 0;   // 唔好靠 START_WAVE,佢試玩時會被改
       `);
     },
   };

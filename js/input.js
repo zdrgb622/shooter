@@ -21,9 +21,10 @@ function toCanvas(e) {
 const hitLangButton = () => langButtons.find(b =>
   pointer.x >= b.x && pointer.x <= b.x + b.w && pointer.y >= b.y && pointer.y <= b.y + b.h);
 
+// 撳得到嘅範圍比畫出嚟嘅框四邊各闊 PAUSE_PAD,手機上先夠大隻手指撳
 const hitPause = () => pauseActive() &&
-  pointer.x >= pauseButton.x && pointer.x <= pauseButton.x + pauseButton.w &&
-  pointer.y >= pauseButton.y && pointer.y <= pauseButton.y + pauseButton.h;
+  pointer.x >= pauseButton.x - PAUSE_PAD && pointer.x <= pauseButton.x + pauseButton.w + PAUSE_PAD &&
+  pointer.y >= pauseButton.y - PAUSE_PAD && pointer.y <= pauseButton.y + pauseButton.h + PAUSE_PAD;
 
 cv.addEventListener('pointerdown', e => {
   cv.setPointerCapture(e.pointerId);
@@ -49,6 +50,7 @@ cv.addEventListener('pointerup', () => { pointer.down = false; });
 
 function startRun() {
   game.state = 'playing';
+  game.wave = START_WAVE - 1;   // startWave() 會 +1
   startWave();
 }
 

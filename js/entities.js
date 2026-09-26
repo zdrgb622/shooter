@@ -34,7 +34,11 @@ function updateWave(dt) {
   while (game.queue.length && game.queue[0].t <= game.waveTime) spawnEnemy(game.queue.shift().type);
   if (!game.queue.length && !enemies.length) {
     game.gap += dt;
-    if (game.gap > 1.2) startWave();
+    if (game.gap > 1.2) {
+      // 打完 BOSS 波就揀能力,揀完由 closePicker() 開下一波
+      if (game.wave % PICK_EVERY === 0) openPicker();
+      else startWave();
+    }
   }
 }
 
@@ -78,12 +82,13 @@ function fire() {
     bullets.push({ x: player.x + Math.sin(a) * 24, y: player.y - 16,
                    vx: Math.sin(a) * 640, vy: -Math.cos(a) * 640, r: 4 });
   }
-  player.cool = Math.max(.075, .16 - player.level * .012);
+  player.cool = Math.max(.05, (.16 - player.level * .012) * player.fireRateMult);
 }
 
 function hitPlayer() {
   const p = player;
   if (p.inv > 0) return;
+  game.combo = 0; game.comboT = 0;
   if (p.shield > 0) {
     p.shield--; p.inv = 1.2; shake(10);
     explode(p.x, p.y, '#6cc8ff', 26, 220);
@@ -95,7 +100,7 @@ function hitPlayer() {
   shake(22);
   if (p.lives <= 0) {
     game.state = 'over';
-    if (game.score > highScore) { highScore = game.score; store.set('stardrift_high', highScore); }
+    if (game.crystals > highScore) { highScore = game.crystals; store.set('stardrift_high', highScore); }
   } else {
     p.inv = 2.4; p.x = W / 2; p.y = H - 110;
     game.clearShots = true;
@@ -175,7 +180,11 @@ function killEnemy(e, i, scored = true) {
   const boss = e.type === 'boss';
   explode(e.x, e.y, e.color, boss ? 90 : 22, boss ? 460 : 260);
   shake(boss ? 24 : 6);
-  if (scored) game.score += e.score;
+  if (scored) {
+    game.crystals += Math.round(e.score * comboMult());
+    game.combo++;
+    game.comboT = COMBO_WINDOW;
+  }
   if (boss) {
     drop(e.x - 26, e.y, 'power'); drop(e.x + 26, e.y, 'shield'); drop(e.x, e.y, 'life');
   } else {
@@ -226,9 +235,9 @@ function updatePowerups(dt) {
     u.y += 95 * dt;
     u.x += Math.sin(u.t * 3) * 40 * dt;
     if (u.y > H + 30) { powerups.splice(i, 1); continue; }
-    if (dist2(u, player) < (u.r + player.r + 6) ** 2) {
+    if (dist2(u, player) < (u.r + player.r + 6 + player.magnet) ** 2) {
       powerups.splice(i, 1);
-      if (u.kind === 'power') { player.level = Math.min(5, player.level + 1); game.score += 50; }
+      if (u.kind === 'power') { player.level = Math.min(5, player.level + 1); game.crystals += 50; }
       if (u.kind === 'shield') player.shield = Math.min(3, player.shield + 1);
       if (u.kind === 'life') player.lives = Math.min(6, player.lives + 1);
       explode(u.x, u.y, PU[u.kind].c, 16, 150);
@@ -246,6 +255,10 @@ function update(dt) {
   }
   game.shake = Math.max(0, game.shake - dt * 45);
   if (game.bannerT > 0) game.bannerT -= dt;
+  if (game.state === 'playing' && !game.paused && game.combo > 0) {
+    game.comboT -= dt;
+    if (game.comboT <= 0) { game.combo = 0; game.comboT = 0; }
+  }
   if (game.state !== 'playing' || game.paused) return;
 
   updatePlayer(dt);

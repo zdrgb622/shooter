@@ -1,14 +1,31 @@
 * { margin: 0; padding: 0; box-sizing: border-box; }
 
+/* 一套配色,canvas 同 DOM 共用,咁兩邊先會似同一隻遊戲。
+   設計圖嘅「午夜街機」。之後要換色只需要改呢度。 */
+:root {
+  --bg: #0B1026;
+  --card: #121A3A;
+  --text: #E8ECFF;
+  --muted: #9AA3D1;
+  --line: #3A4480;
+  --cyan: #4FD1C5;
+  --accent: #FF7A45;
+}
+
 html, body {
   height: 100%;
-  background: #05070f;
+  background: var(--bg);
   display: flex; flex-direction: column;
   align-items: center; justify-content: center;
   font-family: "SF Mono", Menlo, Consolas, monospace;
   color: #7b8db5;
   overflow: hidden;
   touch-action: none;
+}
+
+#stage {
+  position: relative;      /* overlay 嘅定位基準 */
+  line-height: 0;          /* 唔好留 canvas 下面嗰條基線空隙 */
 }
 
 canvas {
@@ -37,3 +54,90 @@ canvas {
 @media (pointer: coarse) {
   #hint { display: none; }
 }
+
+/* ---------- 能力選擇 overlay ---------- */
+/* 字體大細一律用真 px,唔跟 canvas 縮放。canvas 喺手機會縮到 0.75,
+   如果 overlay 都跟住縮,設計上 14px 嘅描述就會變 10.5 真 px,細到睇唔清。 */
+
+#pick {
+  position: absolute;
+  inset: 0;
+  border-radius: 10px;
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Chakra Petch', 'Noto Sans TC', "SF Mono", Menlo, sans-serif;
+  line-height: 1.4;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 20px 16px 16px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+#pick[hidden] { display: none; }
+
+.pick-stage { font-size: 12px; letter-spacing: 4px; color: var(--cyan); }
+.pick-title { font-size: 26px; font-weight: 900; letter-spacing: 1px; }
+
+.pick-bank {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  padding: 8px 10px; border: 1px solid var(--line); border-radius: 6px;
+  font-size: 13px; color: var(--muted);
+}
+.pick-bank b { font-size: 17px; color: var(--text); }
+.pick-bank .cost { color: var(--cyan); font-weight: 700; }
+.pick-bank .cost.poor { color: var(--muted); }
+
+.pick-owned { display: flex; gap: 6px; flex-wrap: wrap; }
+.pick-owned span {
+  display: inline-flex; gap: 5px; align-items: center;
+  padding: 3px 8px; border: 1px solid var(--line); border-radius: 4px;
+  font-size: 12px;
+}
+
+.pick-cards { display: flex; flex-direction: column; gap: 10px; flex-grow: 1; }
+
+.pick-card { position: relative; }
+
+.pick-card > button.body {
+  width: 100%; display: flex; gap: 12px; align-items: flex-start; text-align: left;
+  padding: 12px; background: var(--card); border: 2px solid var(--line);
+  border-radius: 6px; color: var(--text); cursor: pointer;
+  font-family: inherit; font-size: 100%;
+}
+.pick-card > button.body:hover { border-color: var(--muted); }
+.pick-card.on > button.body { border-color: var(--cyan); }
+
+.pick-icon {
+  flex-shrink: 0; width: 52px; height: 52px; border-radius: 6px;
+  border: 1.5px solid currentColor;
+  display: flex; align-items: center; justify-content: center;
+}
+
+.pick-info { display: flex; flex-direction: column; gap: 4px; min-width: 0; flex-grow: 1; padding-right: 38px; }
+.pick-name { font-size: 17px; font-weight: 900; }
+.pick-lv { font-size: 11px; font-weight: 700; padding: 1px 5px; border-radius: 3px; color: var(--bg); }
+.pick-tags { display: flex; gap: 8px; font-size: 11px; letter-spacing: 1px; }
+.pick-desc { font-size: 13px; color: var(--muted); }
+
+.pick-reroll {
+  position: absolute; right: 8px; top: 8px;
+  width: 34px; height: 34px; border-radius: 50%;
+  background: var(--bg); border: 1.5px solid var(--line); color: var(--text);
+  display: flex; align-items: center; justify-content: center; cursor: pointer;
+}
+.pick-reroll:disabled { opacity: .35; cursor: not-allowed; }
+
+/* 觸控裝置要夠大隻手指先撳得中。overlay 唔跟 canvas 縮放,所以呢度係真 px。 */
+@media (pointer: coarse) {
+  .pick-reroll { width: 44px; height: 44px; }
+  .pick-info { padding-right: 46px; }
+}
+
+.pick-confirm {
+  height: 52px; border: none; border-radius: 6px; cursor: pointer;
+  font-family: inherit; font-size: 17px; font-weight: 900; letter-spacing: 4px;
+  background: var(--cyan); color: var(--bg);
+}
+.pick-confirm:disabled { background: var(--line); color: var(--muted); cursor: not-allowed; }

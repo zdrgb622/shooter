@@ -4,17 +4,28 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
 <title>星際戰機 STARDRIFT</title>
+<!-- 設計圖用嘅字體。載入唔到就跌返落 CSS 入面嘅 fallback,遊戲照玩 -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;700&family=Noto+Sans+TC:wght@500;900&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
-<canvas id="game" width="480" height="720"></canvas>
+<!-- canvas 同能力選擇 overlay 要喺同一個容器,overlay 先會跟住 canvas 縮放對齊 -->
+<div id="stage">
+  <canvas id="game" width="480" height="720"></canvas>
+  <div id="pick" hidden></div>
+</div>
 <div id="hint">方向鍵 / WASD 移動 · 空白鍵射擊 · P 暫停 · 亦可用滑鼠拖住玩</div>
 
 <script src="js/core.js"></script>
 <script src="js/i18n.js"></script>
+<script src="js/abilities.js"></script>
+<script src="js/sprites.js"></script>
 <script src="js/input.js"></script>
 <script src="js/entities.js"></script>
 <script src="js/render.js"></script>
+<script src="js/ui.js"></script>
 <script src="js/main.js"></script>
 </body>
 </html>

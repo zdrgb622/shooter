@@ -5,6 +5,11 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { loadGame } = require('./harness');
 
+test('START_WAVE 係 1(試完後期記得改返先好 commit)', () => {
+  const { g } = loadGame();
+  assert.equal(g.START_WAVE, 1, `js/core.js 嘅 START_WAVE 而家係 ${g.START_WAVE}`);
+});
+
 test('載入之後停喺標題畫面', () => {
   const { g } = loadGame();
   assert.equal(g.game.state, 'title');
