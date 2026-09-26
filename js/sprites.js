@@ -92,44 +92,6 @@ function drawShapes(shapes, fill, stroke, lineWidth) {
   if (stroke) { ctx.strokeStyle = stroke; ctx.lineWidth = lineWidth || 1.6; ctx.lineJoin = 'round'; ctx.stroke(); }
 }
 
-// ---------- 背景(設計嘅「行星」款) ----------
-// 設計用 SVG turbulence filter 整星雲,canvas 冇呢樣,用徑向漸層近似。
-// 星星就繼續用 core.js 嗰批會飄嘅,靜態星星喺遊戲入面冇速度感。
-
-const BG = {
-  planet: '#2A3A6E', ring: '#4FD1C5', neb: '114, 36, 62', deep: '#0B1026',
-  rot: -18 * Math.PI / 180,
-};
-
-function drawSpace() {
-  ctx.fillStyle = BG.deep;
-  ctx.fillRect(-30, -30, W + 60, H + 60);
-
-  // 星雲
-  const g = ctx.createRadialGradient(400, 230, 0, 400, 230, 210);
-  g.addColorStop(0, `rgba(${BG.neb}, .5)`);
-  g.addColorStop(1, `rgba(${BG.neb}, 0)`);
-  ctx.fillStyle = g;
-  ctx.fillRect(160, 20, 480, 420);
-
-  // 行星環:外圈減內圈,中間鏤空
-  ctx.globalAlpha = .8;
-  ctx.fillStyle = BG.ring;
-  ctx.beginPath();
-  ctx.ellipse(40, H - 60, 300, 60, BG.rot, 0, Math.PI * 2);
-  ctx.ellipse(40, H - 60, 250, 44, BG.rot, 0, Math.PI * 2);
-  ctx.fill('evenodd');
-  ctx.globalAlpha = 1;
-
-  // 行星本體 + 陰影
-  ctx.fillStyle = BG.planet;
-  ctx.beginPath(); ctx.arc(40, H - 60, 190, 0, Math.PI * 2); ctx.fill();
-  ctx.globalAlpha = .55;
-  ctx.fillStyle = BG.deep;
-  ctx.beginPath(); ctx.ellipse(90, H - 100, 170, 190, 0, 0, Math.PI * 2); ctx.fill();
-  ctx.globalAlpha = 1;
-}
-
 // ---------- BOSS:設計嘅「水晶核」(本地 300×180,中心 150,90) ----------
 // 排列「尖塔」、5 舊水晶、菱形核心,即係設計圖嘅預設。
 

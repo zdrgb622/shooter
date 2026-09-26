@@ -61,7 +61,10 @@ function drawPauseButton() {
 }
 
 function drawBackground() {
-  drawSpace();
+  const g = ctx.createLinearGradient(0, 0, 0, H);
+  g.addColorStop(0, '#070b1a'); g.addColorStop(.55, '#050813'); g.addColorStop(1, '#0b0718');
+  ctx.fillStyle = g;
+  ctx.fillRect(-30, -30, W + 60, H + 60);
 
   for (const s of stars) {
     ctx.fillStyle = ['#2c3a63', '#5a6da0', '#c7d6ff'][s.z];
