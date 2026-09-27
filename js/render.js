@@ -20,6 +20,7 @@ function draw() {
   if (game.state === 'playing') drawPlayer();
   ctx.restore();
 
+  if (game.state === 'finale') drawFinale();
   drawHUD();
   if (game.state === 'title') drawTitle();
   else langButtons.length = 0;
@@ -213,8 +214,10 @@ function drawHUD() {
   ctx.fillText(t('high') + ' ' + highScore, 12, 46);
   ctx.globalAlpha = 1;
 
-  if (boss) {
-    const pct = clamp(boss.hp / boss.maxhp, 0, 1);
+  const finaleBar = game.state === 'finale' && game.finaleT < FINALE.barDrain
+    ? game.finaleBar * (1 - game.finaleT / FINALE.barDrain) : null;
+  if (boss || finaleBar !== null) {
+    const pct = finaleBar !== null ? finaleBar : clamp(boss.hp / boss.maxhp, 0, 1);
     const y = 60, h = Math.round(8 * HUD_K);
     ctx.font = `700 ${Math.round(12 * HUD_K)}px "Chakra Petch", monospace`;
     ctx.textAlign = 'left';
@@ -324,4 +327,73 @@ function drawOver() {
   center(t('reached', game.wave), 16, '#7b8db5', H / 2 + 26);
   center(t('best', highScore), 16, '#ffd35c', H / 2 + 54);
   if (Math.floor(performance.now() / 450) % 2) center(t('restart'), 20, '#7ff0ff', H / 2 + 120);
+}
+
+// ---------- 打低 BOSS 嘅過場 ----------
+// 時序全部喺 entities.js 嘅 FINALE,更新同繪圖用同一份,唔會各計各。
+
+// 由 a 到 b 之間嘅進度,0 到 1
+const span = (t, a, b) => clamp((t - a) / (b - a), 0, 1);
+
+function drawFinale() {
+  const ft = game.finaleT, x = game.finaleX, y = game.finaleY;
+
+  // 三個擴散光環
+  ctx.lineWidth = 2;
+  for (let k = 0; k < 3; k++) {
+    const u = span(ft, FINALE.ring + k * .25, FINALE.ring + k * .25 + FINALE.ringLife);
+    if (u <= 0 || u >= 1) continue;
+    ctx.globalAlpha = 1 - u;
+    ctx.strokeStyle = k === 1 ? ART.hudHi : BOSS_TONE.core;
+    ctx.beginPath(); ctx.arc(x, y, 10 + u * 320, 0, Math.PI * 2); ctx.stroke();
+  }
+  ctx.globalAlpha = 1;
+
+  // 全屏白光:一閃即收
+  if (ft >= FINALE.flash && ft < FINALE.flashEnd) {
+    const a = ft < FINALE.flashPeak
+      ? span(ft, FINALE.flash, FINALE.flashPeak)
+      : 1 - span(ft, FINALE.flashPeak, FINALE.flashEnd);
+    ctx.globalAlpha = a * .9;
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(0, 0, W, H);
+    ctx.globalAlpha = 1;
+  }
+
+  // 暗場
+  const dim = span(ft, FINALE.dim, FINALE.dimEnd) * .55;
+  if (dim > 0) {
+    ctx.globalAlpha = dim;
+    ctx.fillStyle = ART.bg || '#0B1026';
+    ctx.fillRect(0, 0, W, H);
+    ctx.globalAlpha = 1;
+  }
+
+  // 三行字:放大淡入 → 停一陣 → 縮細淡出
+  if (ft < FINALE.textIn) return;
+  const a = ft < FINALE.textHold ? span(ft, FINALE.textIn, FINALE.textFull)
+                                : 1 - span(ft, FINALE.textHold, FINALE.textOut);
+  if (a <= 0) return;
+  const scale = ft < FINALE.textFull ? 1.5 - .5 * span(ft, FINALE.textIn, FINALE.textFull)
+                                    : 1 - .05 * span(ft, FINALE.textHold, FINALE.textOut);
+
+  ctx.save();
+  ctx.globalAlpha = a;
+  ctx.translate(W / 2, 300);
+  ctx.scale(scale, scale);
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+
+  ctx.font = '14px "Chakra Petch", monospace';
+  ctx.fillStyle = BOSS_TONE.core;
+  ctx.fillText(t('bossDefeated'), 0, -44);
+
+  ctx.font = '700 44px "Chakra Petch", monospace';
+  ctx.fillStyle = ART.hudText;
+  ctx.fillText(t('stageClear', game.wave), 0, 0);
+
+  ctx.font = '16px "Noto Sans TC", monospace';
+  ctx.fillStyle = ART.hudHi;
+  ctx.fillText(t('gotCrystals', game.finaleReward), 0, 40);
+  ctx.restore();
 }

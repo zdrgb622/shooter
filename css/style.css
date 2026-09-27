@@ -77,6 +77,14 @@ canvas {
 
 #pick[hidden] { display: none; }
 
+/* 打低 BOSS 之後,能力畫面由下面滑上嚟(過場最後嗰下)。
+   DOM 嘅著數:呢個動畫係瀏覽器做,唔使自己逐幀畫。 */
+@keyframes pickSlideIn {
+  from { transform: translateY(100%); opacity: 0; }
+  to   { transform: none; opacity: 1; }
+}
+#pick.slide { animation: pickSlideIn .63s ease-out both; }
+
 .pick-stage { font-size: 12px; letter-spacing: 4px; color: var(--cyan); }
 .pick-title { font-size: 26px; font-weight: 900; letter-spacing: 1px; }
 

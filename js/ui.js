@@ -11,11 +11,12 @@ const pickEl = document.getElementById('pick');
 let pickOffers = [];      // 而家出緊嘅卡(ability id)
 let pickChosen = null;    // 玩家撳咗邊張,未確認
 
-function openPicker() {
+function openPicker(slideIn = false) {
   game.state = 'picking';
   pickOffers = offerAbilities();
   pickChosen = null;
   renderPicker();
+  if (pickEl) pickEl.classList.toggle('slide', slideIn);
 }
 
 function closePicker() {

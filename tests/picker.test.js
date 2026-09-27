@@ -22,7 +22,7 @@ test('打完 BOSS 波會開能力選擇,唔係 BOSS 波就直接開下一波', (
   assert.equal(game2.g.game.wave, 5, '普通波之後直接開下一波');
 });
 
-test('BOSS 一死即刻彈能力畫面,唔使等間場', () => {
+test('BOSS 一死即刻入過場,過場完先入能力畫面', () => {
   const game = loadGame();
   const { g } = game;
   game.startClean();
@@ -32,7 +32,13 @@ test('BOSS 一死即刻彈能力畫面,唔使等間場', () => {
   boss.y = 200;
   g.bullets.push({ x: boss.x, y: boss.y, vx: 0, vy: 0, r: 4 });
   g.updateBullets(1 / 60);
-  assert.equal(g.game.state, 'picking', 'BOSS 死嗰一刻就應該彈出嚟');
+  assert.equal(g.game.state, 'finale', '死嗰一刻即刻入過場,唔會吉住');
+
+  game.step(Math.ceil(60 * (g.FINALE.pick - .1)));
+  assert.equal(g.game.state, 'finale', '過場未完唔應該跳走');
+
+  game.step(Math.ceil(60 * .2));
+  assert.equal(g.game.state, 'picking', '過場完先入能力畫面');
 });
 
 test('揀能力嗰陣遊戲定格', () => {

@@ -35,7 +35,10 @@ const STRINGS = {
     pickHold: '持有',
     pickUnit: '晶體',
     pickReroll: '重抽',
-    pickConfirm: '裝  備'
+    pickConfirm: '裝  備',
+    bossDefeated: 'BOSS DEFEATED',
+    stageClear: 'STAGE {n} CLEAR',
+    gotCrystals: '獲得 {n} 晶體'
   },
   'zh-Hans': {
     docTitle: '星际战机 STARDRIFT',
@@ -67,7 +70,10 @@ const STRINGS = {
     pickHold: '持有',
     pickUnit: '晶体',
     pickReroll: '重抽',
-    pickConfirm: '装  备'
+    pickConfirm: '装  备',
+    bossDefeated: 'BOSS DEFEATED',
+    stageClear: 'STAGE {n} CLEAR',
+    gotCrystals: '获得 {n} 晶体'
   },
   en: {
     docTitle: 'STARDRIFT',
@@ -99,7 +105,10 @@ const STRINGS = {
     pickHold: 'Hold',
     pickUnit: 'crystals',
     pickReroll: 'Reroll',
-    pickConfirm: 'E Q U I P'
+    pickConfirm: 'E Q U I P',
+    bossDefeated: 'BOSS DEFEATED',
+    stageClear: 'STAGE {n} CLEAR',
+    gotCrystals: '+{n} crystals'
   }
 };
 

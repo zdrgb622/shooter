@@ -171,6 +171,8 @@ function crystalShimmer(t, i) {
 
 function drawBossArt(e) {
   ctx.save();
+  // 中咗最後一擊之後會抽搐,直到爆開為止
+  if (e.dying) ctx.translate(rand(-5, 5), rand(-2.5, 2.5));
   const s = e.r * 2 / 190;            // 本地 300 闊,縮到差唔多兩個半徑
   ctx.scale(s, s);
   ctx.translate(-150, -BOSS_CORE_Y);

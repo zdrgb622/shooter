@@ -250,21 +250,71 @@ function updateBoss(b, dt) {
   }
 }
 
+// 過場時序(秒,由 BOSS 中最後一擊嗰刻計起)。照設計圖,改 FINALE_SPEED 就可以整體快慢。
+const FINALE_SPEED = 1;
+const FINALE = {
+  barDrain: .9,    // 血條瀉到 0 用幾耐
+  ring: .75,       // 第一個光環;第二、三個各遲 .25
+  ringLife: 1.35,
+  burst: .84,      // 碎片炸開 + BOSS 真正消失
+  flash: .93, flashPeak: 1.11, flashEnd: 1.65,
+  dim: 1.38, dimEnd: 2.1,
+  textIn: 1.47, textFull: 1.83, textHold: 2.7, textOut: 3.09,
+  pick: 2.91,      // 能力畫面開始滑上嚟(滑完 .63 秒到位)
+};
+
+// BOSS 中咗最後一擊:唔即刻剷走,留低佢演完過場先
+function startFinale(boss) {
+  boss.dying = true;
+  game.state = 'finale';
+  game.finaleT = 0;
+  game.finaleDone = 0;
+  game.finaleX = boss.x;
+  game.finaleY = boss.y;
+  game.finaleBar = clamp((boss.hp + 1) / boss.maxhp, 0, 1);   // 最後一擊之前條血條去到邊
+  game.finaleReward = boss.score;
+  shake(18);
+}
+
+function updateFinale(dt) {
+  game.finaleT += dt * FINALE_SPEED;
+  const t = game.finaleT;
+  const boss = enemies.find(e => e.dying);
+  if (boss) boss.t += dt;        // 碎片繼續轉,BOSS 唔會突然定格
+
+  if (t >= FINALE.burst && !(game.finaleDone & 1)) {
+    game.finaleDone |= 1;
+    if (boss) {
+      explode(boss.x, boss.y, boss.color, 90, 460);
+      drop(boss.x - 26, boss.y, 'power');
+      drop(boss.x + 26, boss.y, 'shield');
+      drop(boss.x, boss.y, 'life');
+      enemies.splice(enemies.indexOf(boss), 1);
+    }
+    shake(26);
+  }
+
+  if (t >= FINALE.pick && !(game.finaleDone & 2)) {
+    game.finaleDone |= 2;
+    openPicker(true);            // true = 由下面滑上嚟
+  }
+}
+
 function killEnemy(e, i, scored = true) {
-  enemies.splice(i, 1);
   const boss = e.type === 'boss';
-  explode(e.x, e.y, e.color, boss ? 90 : 22, boss ? 460 : 260);
-  shake(boss ? 24 : 6);
   if (scored) {
     game.crystals += Math.round(e.score * comboMult());
     game.combo++;
     game.comboT = COMBO_WINDOW;
   }
+  // BOSS 波:唔即刻剷走,交畀過場處理(爆炸同掉寶都喺過場入面做)
+  if (boss && game.wave % PICK_EVERY === 0) return startFinale(e);
+
+  enemies.splice(i, 1);
+  explode(e.x, e.y, e.color, boss ? 90 : 22, boss ? 460 : 260);
+  shake(boss ? 24 : 6);
   if (boss) {
     drop(e.x - 26, e.y, 'power'); drop(e.x + 26, e.y, 'shield'); drop(e.x, e.y, 'life');
-    // BOSS 一死就即刻揀能力,唔使等 updateWave 嗰 1.2 秒間場。
-    // 爆炸粒子喺閘之上更新,所以揀嘢期間 BOSS 仍然爆緊,唔會突然靜晒。
-    if (game.wave % PICK_EVERY === 0) openPicker();
   } else {
     const r = Math.random();
     if (r < .1) drop(e.x, e.y, 'power');
@@ -354,6 +404,7 @@ function update(dt) {
     game.comboT -= dt;
     if (game.comboT <= 0) { game.combo = 0; game.comboT = 0; }
   }
+  if (game.state === 'finale') { updateFinale(dt); return; }
   if (game.state !== 'playing') return;
 
   updatePlayer(dt);
