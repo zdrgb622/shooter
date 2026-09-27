@@ -134,6 +134,11 @@ function drawEnemy(e) {
   const art = ENEMY_ART[ENEMY_STYLE[e.type]];
   if (art) {
     ctx.save();
+    // 無人機自轉同上下浮 —— 純粹畫面,唔影響碰撞,所以做喺呢度而唔係 entities.js
+    if (e.type === 'gunner') {
+      ctx.translate(0, Math.sin(e.t * 2) * DRONE_BOB);
+      ctx.rotate(e.t * DRONE_SPIN);
+    }
     const s = e.r * 2 * 1.15 / 48;         // 本地 48×48 縮到差唔多兩個半徑咁大
     ctx.scale(s, s);
     ctx.translate(-24, -24);

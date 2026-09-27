@@ -110,6 +110,12 @@ function crystal(bx, by, h, w, ang) {
 
 const BOSS_CORE_Y = 90;
 
+// 動畫參數(設計 demo 嘅 spin / shimmer / bob)
+const SHARD_SPIN = .35;      // 碎片環繞速度,弧度 / 秒
+const DRONE_SPIN = 1.1;      // 無人機自轉,弧度 / 秒
+const DRONE_BOB = 3.5;       // 無人機上下浮嘅幅度(只係畫面,唔影響碰撞)
+const SHIMMER_RATE = .28;    // 水晶閃光幾耐一轉
+
 const BOSS_ART = (() => {
   // 「原本」排列:一舊大水晶企中間,兩邊一對對細啲嘅向外排
   const pairs = [[59, 156, 126, 29, 2], [106, 146, 82, 17, 1], [138, 136, 58, 12, 1], [160, 128, 42, 9, 1]];
@@ -120,24 +126,45 @@ const BOSS_ART = (() => {
   }
   specs.sort((a, b) => a.depth - b.depth);        // 由後排到前
 
-  // 環繞碎片:喺核心周圍轉一圈,喺核心後面嘅排後邊,前面嘅排前邊
-  const back = [], front = [];
-  for (let i = 0; i < 12; i++) {
-    const a = i / 12 * Math.PI * 2 + .3;
-    const x = 150 + Math.cos(a) * 138, y = BOSS_CORE_Y + Math.sin(a) * 46, sz = 5 + (i % 3) * 2;
-    const shard = [[x, y - sz * 1.6], [x + sz * .7, y], [x, y + sz * 1.6], [x - sz * .7, y]];
-    (Math.sin(a) < 0 ? back : front).push(shard);
-  }
-
+  const crystals = specs.map(q => crystal(q.bx, q.by, q.h, q.w, q.ang));
   const z = 1.45;   // 「原本」排列嘅核心大過其他排列
   return {
-    crystals: specs.map(q => crystal(q.bx, q.by, q.h, q.w, q.ang)),
-    shardsBack: back,
-    shardsFront: front,
+    crystals,
+    bodies: crystals.map(k => k.body),   // 受傷閃白時要成堆一齊畫,預先砌好唔使每幀 map
     core: [[150, BOSS_CORE_Y - 22 * z], [150 + 16 * z, BOSS_CORE_Y], [150, BOSS_CORE_Y + 22 * z], [150 - 16 * z, BOSS_CORE_Y]],
     pupil: [[150, BOSS_CORE_Y - 9 * z], [150 + 6 * z, BOSS_CORE_Y], [150, BOSS_CORE_Y + 9 * z], [150 - 6 * z, BOSS_CORE_Y]],
   };
 })();
+
+// 環繞碎片:每幀要重新計位置。用預先開好嘅陣列原地改值,
+// 唔好每幀 new —— 每秒 60 幀 × 12 粒碎片就係大量垃圾,正正係 B6 懷疑緊嗰樣嘢。
+const SHARD_POOL = Array.from({ length: 12 }, (_, i) => ({
+  a0: i / 12 * Math.PI * 2 + .3,
+  sz: 5 + (i % 3) * 2,
+  pts: [[0, 0], [0, 0], [0, 0], [0, 0]],
+}));
+const shardsBack = [], shardsFront = [];
+
+function bossShards(t) {
+  shardsBack.length = 0;
+  shardsFront.length = 0;
+  for (const s of SHARD_POOL) {
+    const a = s.a0 + t * SHARD_SPIN;
+    const x = 150 + Math.cos(a) * 138, y = BOSS_CORE_Y + Math.sin(a) * 46, sz = s.sz;
+    s.pts[0][0] = x;           s.pts[0][1] = y - sz * 1.6;
+    s.pts[1][0] = x + sz * .7; s.pts[1][1] = y;
+    s.pts[2][0] = x;           s.pts[2][1] = y + sz * 1.6;
+    s.pts[3][0] = x - sz * .7; s.pts[3][1] = y;
+    (Math.sin(a) < 0 ? shardsBack : shardsFront).push(s.pts);
+  }
+  return { back: shardsBack, front: shardsFront };
+}
+
+// 水晶閃光:平時暗,間唔中「叮」一下。每舊水晶錯開相位,唔會一齊閃。
+function crystalShimmer(t, i) {
+  const u = (t * SHIMMER_RATE + i * .19) % 1;
+  return .2 + .8 * Math.max(0, 1 - Math.abs(u - .86) / .07);
+}
 
 function drawBossArt(e) {
   ctx.save();
@@ -145,12 +172,16 @@ function drawBossArt(e) {
   ctx.scale(s, s);
   ctx.translate(-150, -BOSS_CORE_Y);
 
-  drawShapes(BOSS_ART.shardsBack, BOSS_TONE.facet, BOSS_TONE.edge, 1);
-  for (const k of BOSS_ART.crystals) {
+  const shards = bossShards(e.t);
+  drawShapes(shards.back, BOSS_TONE.facet, BOSS_TONE.edge, 1);
+
+  BOSS_ART.crystals.forEach((k, i) => {
     drawShapes([k.body], BOSS_TONE.body, BOSS_TONE.edge, 1.5);
     drawShapes([k.facet], BOSS_TONE.facet);
+    ctx.globalAlpha = crystalShimmer(e.t, i);
     drawShapes([k.light], BOSS_TONE.light);
-  }
+    ctx.globalAlpha = 1;
+  });
 
   // 核心跟住攻擊模式轉色,等玩家睇得出佢而家用緊邊招
   const coreColor = ['#EC6FA7', '#F2C94C', '#9B8BFF'][e.mode] || BOSS_TONE.core;
@@ -161,11 +192,11 @@ function drawBossArt(e) {
   drawShapes([BOSS_ART.pupil], BOSS_TONE.facet);
   ctx.restore();
 
-  drawShapes(BOSS_ART.shardsFront, BOSS_TONE.facet, BOSS_TONE.edge, 1);
+  drawShapes(shards.front, BOSS_TONE.facet, BOSS_TONE.edge, 1);
 
   if (e.flash > 0) {
     ctx.globalAlpha = e.flash * .5;
-    drawShapes(BOSS_ART.crystals.map(k => k.body), '#fff');
+    drawShapes(BOSS_ART.bodies, '#fff');
     ctx.globalAlpha = 1;
   }
   ctx.restore();
