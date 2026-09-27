@@ -46,7 +46,8 @@ function spawnEnemy(type) {
   if (type === 'boss') {
     const hp = 55 + game.wave * 22;
     enemies.push({ type: 'boss', x: W / 2, bx: W / 2, y: -100, r: 50, hp, maxhp: hp,
-                   t: 0, fireT: 2, mode: 0, modeT: 4, flash: 0, score: 3000, color: '#ff4d6d' });
+                   t: 0, fireT: 2, mode: 0, modeT: 4, flash: 0, score: 3000, color: '#ff4d6d',
+                   phase: 1, cycle: 0, done: 0 });   // 招式循環用:done 係 bitmask,記住今個循環邊幾下已經出咗
     return;
   }
   const x = rand(45, W - 45);
@@ -151,10 +152,84 @@ function updateGunner(e, dt) {
   e.x = e.bx + Math.sin(e.t * 1.5) * 12;
 }
 
+// 第一階段招式循環(秒)。每一下都有預警:尖端先着燈 / 碎片先彈警示圈,
+// 玩家睇得出下一步,先可以走位 —— 舊嗰三招係冇預警嘅。
+const BOSS_CYCLE = 5;
+const BOSS_VOLLEY_AT = .45;    // 第一個尖端幾時開火
+const BOSS_TIP_GAP = .25;      // 尖端之間差幾耐
+const BOSS_TIP_GLOW = .65;     // 着燈維持幾耐
+const BOSS_FLING_WARN = 2.6;   // 碎片警示圈幾時出
+const BOSS_FLING_AT = 2.9;     // 碎片幾時掟出嚟
+const BOSS_FLING_ANGLES = [150, 90, 30];
+
+// 第一階段:兩招輪住嚟。打到一半血轉第二階段,用返舊嗰三招(冇預警、更亂)
+const bossPhase = b => (b.hp / b.maxhp > .5 ? 1 : 2);
+
+// 某個時刻到咗、而且今個循環未出過 → 出手一次
+function bossDue(b, at, bit) {
+  if (b.cycle < at || (b.done & bit)) return false;
+  b.done |= bit;
+  return true;
+}
+
+// 尖端着燈嘅光度(0 = 冇);render 同 update 共用同一條時序,唔會各計各
+function bossTipGlow(b, i) {
+  const u = b.cycle - i * BOSS_TIP_GAP;
+  if (u < 0 || u > BOSS_TIP_GLOW) return 0;
+  return 1 - u / BOSS_TIP_GLOW;
+}
+
+const bossFlingWarn = b =>
+  b.cycle >= BOSS_FLING_WARN && b.cycle < BOSS_FLING_AT
+    ? (b.cycle - BOSS_FLING_WARN) / (BOSS_FLING_AT - BOSS_FLING_WARN) : 0;
+
+// 由本地座標(BOSS 圖係 300×180)換做畫面座標
+const bossLocalToWorld = (b, lx, ly) => {
+  const s = b.r * 2 / 190;
+  return [b.x + (lx - 150) * s, b.y + (ly - BOSS_CORE_Y) * s];
+};
+
+function volleyFromTip(b, i) {
+  const tips = BOSS_ART.tips;
+  const [x, y] = bossLocalToWorld(b, tips[i][0], tips[i][1]);
+  const spread = -30 + i * (tips.length > 1 ? 60 / (tips.length - 1) : 0);
+  for (const d of [-10, 0, 10]) {
+    eshoot(x, y, Math.PI / 2 - (spread + d) * Math.PI / 180, 320, '#4FD1C5');
+  }
+}
+
+// 碎片掟向玩家:沿一條弧線飛過去,唔係直線,所以要記住成條路徑
+function flingShards(b) {
+  for (const deg of BOSS_FLING_ANGLES) {
+    const a = deg * Math.PI / 180 + b.t * SHARD_SPIN;
+    const [x, y] = bossLocalToWorld(b, 150 + Math.cos(a) * 138, BOSS_CORE_Y + Math.sin(a) * 46);
+    ebullets.push({
+      x, y, vx: 0, vy: 0, r: 8, color: '#4FD1C5',
+      path: { x0: x, y0: y, cx: (x + player.x) / 2, cy: y + 140,
+              x1: player.x, y1: player.y, t: 0, dur: 1.2 },
+    });
+  }
+}
+
+function updateBossPhase1(b, dt) {
+  b.cycle += dt;
+  if (b.cycle >= BOSS_CYCLE) { b.cycle -= BOSS_CYCLE; b.done = 0; }
+  b.mode = b.cycle < BOSS_FLING_WARN ? 0 : 1;
+
+  for (let i = 0; i < BOSS_ART.tips.length; i++) {
+    if (bossDue(b, BOSS_VOLLEY_AT + i * BOSS_TIP_GAP, 1 << i)) volleyFromTip(b, i);
+  }
+  if (bossDue(b, BOSS_FLING_AT, 1 << 30)) flingShards(b);
+}
+
 function updateBoss(b, dt) {
   if (b.y < 135) { b.y += 55 * dt; return; }
   b.x = W / 2 + Math.sin(b.t * .65) * (W / 2 - 75);
   b.y = 135 + Math.sin(b.t * 1.3) * 14;
+
+  b.phase = bossPhase(b);
+  if (b.phase === 1) return updateBossPhase1(b, dt);
+
   b.modeT -= dt;
   if (b.modeT <= 0) { b.mode = (b.mode + 1) % 3; b.modeT = 4.5; b.fireT = .4; }
   b.fireT -= dt;
@@ -217,7 +292,22 @@ function updateBullets(dt) {
   }
   for (let i = ebullets.length - 1; i >= 0; i--) {  // iterate all bullets from enemy(ebullets)
     const b = ebullets[i];
-    b.x += b.vx * dt; b.y += b.vy * dt; // moving ebullets
+    if (b.path) {
+      // 掟出嚟嘅碎片行二次貝茲弧線;飛到終點就改返做直線,等出界嗰段照樣清得走
+      const p = b.path;
+      p.t += dt;
+      const u = Math.min(1, p.t / p.dur), v = 1 - u;
+      const nx = v * v * p.x0 + 2 * v * u * p.cx + u * u * p.x1;
+      const ny = v * v * p.y0 + 2 * v * u * p.cy + u * u * p.y1;
+      if (u >= 1) {
+        const len = Math.hypot(nx - b.x, ny - b.y) || 1;
+        b.vx = (nx - b.x) / len * 300; b.vy = (ny - b.y) / len * 300;
+        b.path = null;
+      }
+      b.x = nx; b.y = ny;
+    } else {
+      b.x += b.vx * dt; b.y += b.vy * dt; // moving ebullets
+    }
     if (b.y > H + 20 || b.y < -40 || b.x < -30 || b.x > W + 30) { ebullets.splice(i, 1); continue; }  // when ebullets outside boundry
     if (player.inv <= 0 && dist2(b, player) < (b.r + player.r) ** 2) {
       ebullets.splice(i, 1);

@@ -127,9 +127,12 @@ const BOSS_ART = (() => {
   specs.sort((a, b) => a.depth - b.depth);        // 由後排到前
 
   const crystals = specs.map(q => crystal(q.bx, q.by, q.h, q.w, q.ang));
+  // 招式「晶簇齊射」由每個尖端射出,由左至右排好,等扇形角度算得順
+  const tips = crystals.map(k => k.body[0]).slice().sort((a, b) => a[0] - b[0]);
   const z = 1.45;   // 「原本」排列嘅核心大過其他排列
   return {
     crystals,
+    tips,
     bodies: crystals.map(k => k.body),   // 受傷閃白時要成堆一齊畫,預先砌好唔使每幀 map
     core: [[150, BOSS_CORE_Y - 22 * z], [150 + 16 * z, BOSS_CORE_Y], [150, BOSS_CORE_Y + 22 * z], [150 - 16 * z, BOSS_CORE_Y]],
     pupil: [[150, BOSS_CORE_Y - 9 * z], [150 + 6 * z, BOSS_CORE_Y], [150, BOSS_CORE_Y + 9 * z], [150 - 6 * z, BOSS_CORE_Y]],
@@ -175,6 +178,22 @@ function drawBossArt(e) {
   const shards = bossShards(e.t);
   drawShapes(shards.back, BOSS_TONE.facet, BOSS_TONE.edge, 1);
 
+  // 碎片預警:掟出嚟之前先喺嗰三粒碎片位置彈個圈,等玩家知道要閃
+  if (e.phase === 1) {
+    const warn = bossFlingWarn(e);
+    if (warn > 0) {
+      ctx.strokeStyle = BOSS_TONE.core;
+      ctx.lineWidth = 2;
+      for (const deg of BOSS_FLING_ANGLES) {
+        const a = deg * Math.PI / 180 + e.t * SHARD_SPIN;
+        const x = 150 + Math.cos(a) * 138, y = BOSS_CORE_Y + Math.sin(a) * 46;
+        ctx.globalAlpha = 1 - warn;
+        ctx.beginPath(); ctx.arc(x, y, 6 + warn * 22, 0, Math.PI * 2); ctx.stroke();
+      }
+      ctx.globalAlpha = 1;
+    }
+  }
+
   BOSS_ART.crystals.forEach((k, i) => {
     drawShapes([k.body], BOSS_TONE.body, BOSS_TONE.edge, 1.5);
     drawShapes([k.facet], BOSS_TONE.facet);
@@ -193,6 +212,18 @@ function drawBossArt(e) {
   ctx.restore();
 
   drawShapes(shards.front, BOSS_TONE.facet, BOSS_TONE.edge, 1);
+
+  // 尖端着燈:齊射之前逐個尖端亮一亮
+  if (e.phase === 1) {
+    ctx.fillStyle = BOSS_TONE.light;
+    BOSS_ART.tips.forEach((tip, i) => {
+      const g = bossTipGlow(e, i);
+      if (g <= 0) return;
+      ctx.globalAlpha = g;
+      ctx.beginPath(); ctx.arc(tip[0], tip[1], 4 + g * 9, 0, Math.PI * 2); ctx.fill();
+    });
+    ctx.globalAlpha = 1;
+  }
 
   if (e.flash > 0) {
     ctx.globalAlpha = e.flash * .5;
