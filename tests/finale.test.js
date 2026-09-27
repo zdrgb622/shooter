@@ -5,6 +5,10 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { loadGame } = require('./harness');
 
+// 過場嘅秒數換算做幀數。一定要除返 FINALE_SPEED —— 佢係俾人調嘅,
+// 測試唔可以當佢一定係 1,否則一調速就會無端端紅一堆。
+const frames = (g, seconds) => Math.ceil(60 * seconds / g.FINALE_SPEED);
+
 function killBoss() {
   const game = loadGame();
   const { g } = game;
@@ -23,10 +27,10 @@ test('BOSS 演完先消失,唔係中一槍就即刻冇咗', () => {
   assert.ok(g.enemies.includes(boss), '過場一開始 BOSS 仲要喺度');
   assert.equal(boss.dying, true);
 
-  game.step(Math.ceil(60 * (g.FINALE.burst - .1)));
+  game.step(frames(g, g.FINALE.burst) - 6);
   assert.ok(g.enemies.includes(boss), '未到爆開嗰下,BOSS 仲喺度');
 
-  game.step(Math.ceil(60 * .2));
+  game.step(12);
   assert.ok(!g.enemies.includes(boss), '爆開之後先消失');
 });
 
@@ -34,7 +38,7 @@ test('掉寶同爆炸都係喺爆開嗰下先出,唔會早過個畫面', () => {
   const { game, g } = killBoss();
   assert.equal(g.powerups.length, 0, '一開始唔應該已經掉咗寶');
 
-  game.step(Math.ceil(60 * (g.FINALE.burst + .1)));
+  game.step(frames(g, g.FINALE.burst) + 6);
   assert.equal(g.powerups.length, 3);
   assert.ok(g.particles.length > 50, '應該有大爆炸');
 });
@@ -49,15 +53,21 @@ test('過場期間遊戲定格,但粒子照郁', () => {
   const { game, g } = killBoss();
   g.eshoot(100, 100, Math.PI / 2, 300);
   const y0 = g.ebullets[0].y;
-  const n0 = g.particles.length;
-  game.step(20);
+
+  // 自己放幾粒粒子落去,唔好靠「爆炸嗰陣啱啱好有幾多粒」——
+  // 數量會隨時間同 FINALE_SPEED 變,用嚟做判斷會時好時壞
+  g.explode(240, 300, '#fff', 6, 200);
+  const p = g.particles[g.particles.length - 1];
+  const py = p.y;
+
+  game.step(6);
   assert.equal(g.ebullets[0].y, y0, '敵彈唔應該再郁');
-  assert.notEqual(g.particles.length, n0, '粒子要繼續演');
+  assert.notEqual(p.y, py, '粒子要繼續演');
 });
 
 test('過場一定行得到尾,唔會卡喺中間', () => {
   const { game, g } = killBoss();
-  game.step(Math.ceil(60 * (g.FINALE.pick + .5)));
+  game.step(frames(g, g.FINALE.pick) + 30);
   assert.equal(g.game.state, 'picking');
   assert.equal(g.pickOffers.length, 3, '應該已經抽好三張卡');
 });

@@ -40,7 +40,7 @@ test('第 5 波係 BOSS,打得死', () => {
   assert.equal(g.game.state, 'finale', '打低 BOSS 會入過場');
 
   // BOSS 要演完先真正消失,所以要行到碎片炸開嗰下
-  game.step(Math.ceil(60 * (g.FINALE.burst + .1)));
+  game.step(Math.ceil(60 * g.FINALE.burst / g.FINALE_SPEED) + 6);
   assert.ok(!g.enemies.includes(boss), 'BOSS 應該死咗');
   assert.equal(g.powerups.length, 3, 'BOSS 死咗應該掉三件寶');
 });

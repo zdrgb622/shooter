@@ -251,7 +251,7 @@ function updateBoss(b, dt) {
 }
 
 // 過場時序(秒,由 BOSS 中最後一擊嗰刻計起)。照設計圖,改 FINALE_SPEED 就可以整體快慢。
-const FINALE_SPEED = 1;
+const FINALE_SPEED = 1.75;
 const FINALE = {
   barDrain: .9,    // 血條瀉到 0 用幾耐
   ring: .75,       // 第一個光環;第二、三個各遲 .25

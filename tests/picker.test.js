@@ -34,10 +34,11 @@ test('BOSS 一死即刻入過場,過場完先入能力畫面', () => {
   g.updateBullets(1 / 60);
   assert.equal(g.game.state, 'finale', '死嗰一刻即刻入過場,唔會吉住');
 
-  game.step(Math.ceil(60 * (g.FINALE.pick - .1)));
+  const pickFrames = Math.ceil(60 * g.FINALE.pick / g.FINALE_SPEED);   // 除返速度,唔好當佢係 1
+  game.step(pickFrames - 6);
   assert.equal(g.game.state, 'finale', '過場未完唔應該跳走');
 
-  game.step(Math.ceil(60 * .2));
+  game.step(12);
   assert.equal(g.game.state, 'picking', '過場完先入能力畫面');
 });
 
