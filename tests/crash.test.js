@@ -66,3 +66,35 @@ test('最後一條命中彈:game over,唔會 crash', () => {
   assert.doesNotThrow(() => game.step(30));
   assert.equal(g.game.state, 'over');
 });
+
+// B4:死嗰下唯一冇設 inv 嘅分支,所以同一幀嘅其他子彈會繼續扣命
+test('最後一條命:多粒子彈同時中彈,命唔會變負數', () => {
+  const game = loadGame();
+  const { g } = game;
+  game.startClean();
+  g.player.lives = 1;
+  volley(game, 12);
+
+  game.step(30);
+  assert.equal(g.game.state, 'over');
+  assert.equal(g.player.lives, 0, '12 粒子彈只應該扣得一條命');
+});
+
+test('對照組:game over 分支唔設 inv,命就會變負數', () => {
+  // 證明上面個測試真係捉得到 B4
+  const game = loadGame();
+  const { g } = game;
+  game.startClean();
+  game.run('player.lives = 1;');
+  game.run(`
+    const orig = hitPlayer;
+    hitPlayer = function () {
+      const before = player.inv;
+      orig();
+      if (game.state === 'over') player.inv = before;   // 還原舊行為
+    };
+  `);
+  volley(game, 12);
+  game.step(30);
+  assert.ok(g.player.lives < 0, '舊行為會扣到負數');
+});

@@ -115,7 +115,8 @@ canvas {
   font-family: inherit; font-size: 100%;
 }
 .pick-card > button.body:hover { border-color: var(--muted); }
-.pick-card.on > button.body { border-color: var(--cyan); }
+/* 撳一下就即裝,所以撳落去嗰刻要有反應,唔係靜雞雞就冇咗個畫面 */
+.pick-card > button.body:active { border-color: var(--cyan); background: #18224a; }
 
 .pick-icon {
   flex-shrink: 0; width: 52px; height: 52px; border-radius: 6px;
@@ -143,9 +144,3 @@ canvas {
   .pick-info { padding-right: 46px; }
 }
 
-.pick-confirm {
-  height: 52px; border: none; border-radius: 6px; cursor: pointer;
-  font-family: inherit; font-size: 17px; font-weight: 900; letter-spacing: 4px;
-  background: var(--cyan); color: var(--bg);
-}
-.pick-confirm:disabled { background: var(--line); color: var(--muted); cursor: not-allowed; }

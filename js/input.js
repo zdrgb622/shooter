@@ -2,6 +2,7 @@ const keys = {};
 const pointer = { x: null, y: null, down: false };
 
 addEventListener('keydown', e => {  // add event to the handler
+  inputMode = 'key';            // 撳過鍵盤 = 有鍵盤,標題畫面就講鍵盤嘅操作
   if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'].includes(e.code)) e.preventDefault();  // only when button is pressed will preventDefault()
   keys[e.code] = true;
   if ((e.code === 'KeyP' || e.code === 'Escape') && game.state === 'playing') game.paused = !game.paused;
@@ -27,6 +28,8 @@ const hitPause = () => pauseActive() &&
   pointer.y >= pauseButton.y - PAUSE_PAD && pointer.y <= pauseButton.y + pauseButton.h + PAUSE_PAD;
 
 cv.addEventListener('pointerdown', e => {
+  // 只有真係手指撳才當 touch。滑鼠唔算 —— 用滑鼠嘅人有鍵盤,照講鍵盤嘅操作
+  if (e.pointerType === 'touch') inputMode = 'touch';
   cv.setPointerCapture(e.pointerId);
   pointer.down = true;
   toCanvas(e);
@@ -82,6 +85,7 @@ function pollGamepad() {
 
   const a = btn(0), start = btn(9);
   pad.fire = a || btn(7);  // A 或者 RT
+  if (x || y || a || start || pad.fire) inputMode = 'pad';
 
   // 只認「啱啱撳落」嗰一下,唔係「撳住」—— 否則死嗰陣撳住 A 開火,會即刻重新開始
   if (start && !padPrev.start) {

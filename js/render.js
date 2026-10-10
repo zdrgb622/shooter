@@ -2,6 +2,9 @@
 // 再逐幀隨機位移就會永遠震落去。
 const shakeActive = () => game.shake > .3 && !game.paused;
 
+// 一局開咗、架機仲未爆:揀能力、過場都計。只有標題同 game over 冇架機。
+const shipOnScreen = () => game.state === 'playing' || game.state === 'picking' || game.state === 'finale';
+
 function draw() {
   ctx.save();
   if (shakeActive()) ctx.translate(rand(-game.shake, game.shake) * .35, rand(-game.shake, game.shake) * .35);
@@ -17,7 +20,8 @@ function draw() {
   for (const u of powerups) drawPowerup(u);
   for (const e of enemies) drawEnemy(e);
   drawBullets();
-  if (game.state === 'playing') drawPlayer();
+  // 揀能力同過場嗰陣架機都要留喺度 —— 突然唔見咗會以為自己死咗
+  if (shipOnScreen()) drawPlayer();
   ctx.restore();
 
   if (game.state === 'finale') drawFinale();
@@ -129,6 +133,13 @@ function drawPlayer() {
 }
 
 function drawEnemy(e) {
+  // BOSS 由 BOSSES 表自己畫(星蛇成條身喺畫面周圍,唔係圍住一個中心點)。
+  // 階段可以有自己嘅 draw,即係「轉樣」。
+  if (e.type === 'boss') {
+    const def = BOSSES[e.kind], ph = def.phases[e.phase - 1];
+    ((ph && ph.draw) || def.draw)(e);
+    return;
+  }
   ctx.save();
   ctx.translate(e.x, e.y);
 
@@ -153,7 +164,8 @@ function drawEnemy(e) {
     }
     ctx.restore();
   } else {
-    drawBossArt(e);
+    // 漏咗喺 sprites.js 加外形:畫個圓頂住,至少睇得見、打得中,唔會靜雞雞隱形
+    drawShapes([circ(0, 0, e.r)], ART.eBody, ART.eDetail, 2);
   }
   ctx.restore();
 }
@@ -218,15 +230,17 @@ function drawHUD() {
     ? game.finaleBar * (1 - game.finaleT / FINALE.barDrain) : null;
   if (boss || finaleBar !== null) {
     const pct = finaleBar !== null ? finaleBar : clamp(boss.hp / boss.maxhp, 0, 1);
+    const def = BOSSES[boss ? boss.kind : game.finaleKind];
+    const color = (boss && boss.edge) || game.finaleColor || ART.eLight;
     const y = 60, h = Math.round(8 * HUD_K);
     ctx.font = `700 ${Math.round(12 * HUD_K)}px "Chakra Petch", monospace`;
     ctx.textAlign = 'left';
-    ctx.fillStyle = ART.eLight;
-    ctx.fillText('CRYSTAL CORE', 12, y - 2);
+    ctx.fillStyle = color;
+    ctx.fillText(def ? def.label : 'BOSS', 12, y - 2);
     const barX = 108;
     ctx.fillStyle = 'rgba(255,255,255,.12)';
     ctx.fillRect(barX, y, W - barX - 12, h);
-    ctx.fillStyle = ART.eLight;
+    ctx.fillStyle = color;
     ctx.fillRect(barX, y, (W - barX - 12) * pct, h);
   }
 
@@ -344,7 +358,7 @@ function drawFinale() {
     const u = span(ft, FINALE.ring + k * .25, FINALE.ring + k * .25 + FINALE.ringLife);
     if (u <= 0 || u >= 1) continue;
     ctx.globalAlpha = 1 - u;
-    ctx.strokeStyle = k === 1 ? ART.hudHi : BOSS_TONE.core;
+    ctx.strokeStyle = k === 1 ? ART.hudHi : (game.finaleColor || BOSS_TONE.core);
     ctx.beginPath(); ctx.arc(x, y, 10 + u * 320, 0, Math.PI * 2); ctx.stroke();
   }
   ctx.globalAlpha = 1;
@@ -385,7 +399,7 @@ function drawFinale() {
   ctx.textBaseline = 'middle';
 
   ctx.font = '14px "Chakra Petch", monospace';
-  ctx.fillStyle = BOSS_TONE.core;
+  ctx.fillStyle = game.finaleColor || BOSS_TONE.core;
   ctx.fillText(t('bossDefeated'), 0, -44);
 
   ctx.font = '700 44px "Chakra Petch", monospace';

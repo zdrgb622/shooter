@@ -279,7 +279,72 @@ lands exactly on its target.
 
 ---
 
+## The on-screen instructions assumed a keyboard
+
+The title screen always read "Arrow keys / WASD — Move", "Space — Fire" and
+"PRESS SPACE TO START". On a phone none of that exists. A touch player had no
+way to learn that dragging moves the ship and holding fires, short of trying it
+by accident. The game had supported touch and, later, gamepads for a while; only
+the words never changed.
+
+The obvious fix is a media query inside the draw call: if the pointer is coarse,
+draw the touch lines. That is wrong in two ways. It answers "what kind of device
+is this?" when the question is "what is this person actually using?" — a laptop
+with a touchscreen is both, and a gamepad is neither. And it scatters the
+decision across every place that draws a prompt: the title screen, the game-over
+screen, the pause overlay, the language label.
+
+Instead the game keeps one piece of state, `inputMode`, holding `key`, `touch`
+or `pad`. It starts as a guess from `matchMedia('(pointer: coarse)')` so a phone
+is right before the first tap, and after that it simply follows whatever was
+used last: a key press sets `key`, a touch pointer sets `touch`, any gamepad
+input sets `pad`. A mouse deliberately does not set `touch` — someone using a
+mouse has a keyboard, so the keyboard instructions are the useful ones.
+
+The strings that vary are then written as objects:
+
+```js
+ctlMove: { key: 'Arrow keys / WASD  Move', touch: 'Drag anywhere  Move', pad: 'Left stick / D-pad  Move' },
+```
+
+and `t()` picks the right branch. Because the selection lives inside `t()`,
+not one call site had to change — the title screen, game-over screen and pause
+overlay all got device-appropriate text without being touched.
+
+One wrinkle worth recording: `inputMode` has to be declared in `core.js`, not in
+`input.js` where it conceptually belongs. The scripts load in a fixed order and
+`i18n.js` runs before `input.js`; `i18n.js` calls `t()` at load time to set the
+document title, and reading a `let` that a later file declares throws on the
+temporal dead zone. Putting it in the file that loads first makes the ordering
+impossible to get wrong rather than merely currently correct.
+
+Tests cover both halves: that every variable string has all three variants in
+all three languages, that the touch text mentions no keys, and that each kind of
+input actually switches the mode. Deleting the touch branch turns two of them
+red.
+
 ## Smaller fixes
+
+- **The ship vanished during the boss's death sequence.** The draw call only
+  rendered the player while the state was `playing`, so the two seconds between
+  the killing blow and the upgrade screen showed an exploding boss above an
+  empty cockpit. The condition now asks whether a run is in progress rather than
+  whether the game is accepting input.
+- **The boss's last shots waited for the player to come back.** Enemy bullets
+  already in flight froze during the defeat sequence and the upgrade screen, then
+  resumed the instant play did — straight into a player who had been reading
+  cards. Clearing them is deferred through the same `clearShots` flag the crash
+  fix introduced, so it never touches the array from inside a loop. That meant
+  moving the flag's handler above the state gates in `update()`: it used to run
+  at the very end of the playing-only path, where a flag raised while picking
+  would never have been seen.
+- **Lives went negative on the final hit.** `hitPlayer()` set an invulnerability
+  window on the "shield absorbed it" and "respawn" branches, but not on the
+  "that was your last life" branch. Every other enemy bullet in that same frame
+  therefore kept calling it: twelve bullets took the counter to -6 and stacked
+  seven explosions. Fixed by setting the window there too. The test has a
+  control group that restores the old behaviour and asserts it does go negative,
+  so the test cannot quietly stop proving anything.
 
 - **Boss health bar overlapped the HUD.** It was drawn at the same height as
   the high-score text. Moved below the HUD row.

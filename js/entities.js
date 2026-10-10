@@ -7,50 +7,78 @@ const SPREAD = {
 };
 
 // ---------- 波次 ----------
+// ---------- 一波點樣砌出嚟 ----------
+// 全部設定集中喺呢度,想試唔同嘅關卡設置就淨係改呢舊嘢,唔使郁下面嘅邏輯。
+// 詳細點改、改完會點,見 TUNING.md 第 4 節。
+const WAVE = {
+  count: w => Math.max(20, 5 + w * 2),                    // 一波幾多隻
+  gap: w => Math.max(.25, .85 - w * .05),    // 一隻隻之間隔幾耐(秒)
+  lead: .9,                                 // 開波之後幾耐出第一隻
+  bossLead: 1.4,                            // BOSS 波幾耐出 BOSS
+  bossEvery: 3,                             // 幾多波一隻 BOSS
+  bosses: ['crystal', 'serpent'],           // BOSS 波輪住出邊隻(名喺 js/bosses.js 嘅 BOSSES)
+
+  // 出邊種怪:喺已經解鎖(wave >= from)嘅項目之間按 weight 抽。
+  // 加一種新怪 = 加一行,唔使改下面任何嘢。
+  mix: [
+    { type: 'gunner', from: 1, weight: 22 },
+    { type: 'darter', from: 2, weight: 23 },
+    { type: 'grunt', from: 1, weight: 55 },
+  ],
+};
+
+// 試關卡設置用:寫咗嘢落去就會取代上面嘅隨機砌法(BOSS 波除外)。
+// 每項 { at: 第幾秒, type: 'grunt' | 'darter' | 'gunner', x: 0(最左)~ 1(最右),唔寫就隨機 }。
+// 例:[{ at: 1, type: 'grunt', x: .2 }, { at: 1, type: 'grunt', x: .8 }]
+// 試完記得改返 null 先好 commit —— npm test 會提你。
+let WAVE_SCRIPT = null;   // let 唔係 const:測試要換走佢嚟驗證呢個功能
+
+function rollEnemyType(w) {
+  const open = WAVE.mix.filter(m => w >= m.from);
+  const total = open.reduce((sum, m) => sum + m.weight, 0);
+  let roll = Math.random() * total;
+  return (open.find(m => (roll -= m.weight) < 0) || open[open.length - 1]).type;
+}
+
+function buildWave(w) {
+  if (WAVE_SCRIPT) return WAVE_SCRIPT.map(e => ({ t: e.at, type: e.type, x: e.x }));
+  const gapT = WAVE.gap(w);
+  const queue = [];
+  for (let i = 0; i < WAVE.count(w); i++) {
+    queue.push({ t: WAVE.lead + i * gapT, type: rollEnemyType(w) });
+  }
+  return queue;
+}
+
 function startWave() {
   game.wave++;
   game.waveTime = 0;
   game.gap = 0;
-  game.bannerBoss = game.wave % 5 === 0;
-  if (game.bannerBoss) {
-    game.queue = [{ t: 1.4, type: 'boss' }];
-  } else {
-    const n = 5 + game.wave * 2;
-    const gapT = Math.max(0.3, 0.85 - game.wave * 0.04);
-    game.queue = [];
-    for (let i = 0; i < n; i++) {
-      const roll = Math.random();
-      let type = 'grunt';
-      if (game.wave >= 3 && roll > .78) type = 'gunner';
-      else if (game.wave >= 2 && roll > .55) type = 'darter';
-      game.queue.push({ t: 0.9 + i * gapT, type });
-    }
-  }
+  game.bannerBoss = game.wave % WAVE.bossEvery === 0;
+  game.queue = game.bannerBoss ? [{ t: WAVE.bossLead, type: 'boss' }] : buildWave(game.wave);
   game.bannerT = 1.8;
 }
 
 function updateWave(dt) {
   game.waveTime += dt;
-  while (game.queue.length && game.queue[0].t <= game.waveTime) spawnEnemy(game.queue.shift().type);
+  while (game.queue.length && game.queue[0].t <= game.waveTime) {
+    const next = game.queue.shift();
+    spawnEnemy(next.type, next.x);
+  }
   if (!game.queue.length && !enemies.length) {
     game.gap += dt;
     if (game.gap > 1.2) {
-      // 打完 BOSS 波就揀能力,揀完由 closePicker() 開下一波
-      if (game.wave % PICK_EVERY === 0) openPicker();
+      // 夠波數就揀能力,揀完由 closePicker() 開下一波
+      if (pickDue()) openPicker();
       else startWave();
     }
   }
 }
 
-function spawnEnemy(type) {
-  if (type === 'boss') {
-    const hp = 55 + game.wave * 22;
-    enemies.push({ type: 'boss', x: W / 2, bx: W / 2, y: -100, r: 50, hp, maxhp: hp,
-                   t: 0, fireT: 2, mode: 0, modeT: 4, flash: 0, score: 3000, color: '#ff4d6d',
-                   phase: 1, cycle: 0, done: 0 });   // 招式循環用:done 係 bitmask,記住今個循環邊幾下已經出咗
-    return;
-  }
-  const x = rand(45, W - 45);
+// x 係 0(最左)到 1(最右),唔傳就隨機 —— 寫關卡嘅時候用得着
+function spawnEnemy(type, at) {
+  if (type === 'boss') { spawnBoss(bossForWave(game.wave)); return; }   // 見 js/bosses.js
+  const x = at === undefined ? rand(45, W - 45) : 45 + clamp(at, 0, 1) * (W - 90);
   const e = { type, x, bx: x, y: -40, t: rand(0, 6), flash: 0 };
   if (type === 'grunt')
     Object.assign(e, { r: 16, hp: 1 + Math.floor(game.wave / 4), vy: 85 + game.wave * 4,
@@ -101,6 +129,9 @@ function hitPlayer() {
   shake(22);
   if (p.lives <= 0) {
     game.state = 'over';
+    // 同一幀通常仲有好多粒敵彈撞到。冇呢行就會一粒扣一次命,lives 變負數、爆炸疊幾次。
+    // 另一條分支本來就有設 inv,得呢條冇 —— 所以淨係死嗰下會出事。
+    p.inv = 999;
     if (game.crystals > highScore) { highScore = game.crystals; store.set('stardrift_high', highScore); }
   } else {
     p.inv = 2.4; p.x = W / 2; p.y = H - 110;
@@ -115,6 +146,20 @@ function eshoot(x, y, a, sp, color = '#ff8fb0') {
 
 const aimAt = (x, y) => Math.atan2(player.y - y, player.x - x);
 
+// 子彈打唔打中、戰機撞唔撞到。BOSS 唔一定係一個圓(星蛇係一條 24 節嘅身),
+// 所以 BOSS 可以喺 BOSSES 表自己答;冇寫就當係一個半徑 r 嘅圓。
+function enemyHit(e, b) {            // 回傳傷害,0 = 冇中
+  const def = e.type === 'boss' && BOSSES[e.kind];
+  if (def && def.hit) return def.hit(e, b);
+  return dist2(b, e) < (b.r + e.r) ** 2 ? 1 : 0;
+}
+
+function enemyTouches(e, p) {
+  const def = e.type === 'boss' && BOSSES[e.kind];
+  if (def && def.touches) return def.touches(e, p);
+  return dist2(e, p) < (e.r + p.r) ** 2;
+}
+
 function updateEnemies(dt) {
   for (let i = enemies.length - 1; i >= 0; i--) {
     const e = enemies[i];
@@ -128,9 +173,10 @@ function updateEnemies(dt) {
       e.x = clamp(e.bx + Math.sin(e.t * 2.2) * e.sway, e.r, W - e.r);
     }
 
-    if (e.y > H + 70) { enemies.splice(i, 1); continue; }
+    // 飛出畫面底就當走咗。BOSS 例外 —— 星蛇衝刺會成條衝出畫面再返嚟
+    if (e.type !== 'boss' && e.y > H + 70) { enemies.splice(i, 1); continue; }
 
-    if (player.inv <= 0 && dist2(e, player) < (e.r + player.r) ** 2) {
+    if (player.inv <= 0 && enemyTouches(e, player)) {
       hitPlayer();
       if (e.type !== 'boss') killEnemy(e, i, false);
     }
@@ -152,104 +198,6 @@ function updateGunner(e, dt) {
   e.x = e.bx + Math.sin(e.t * 1.5) * 12;
 }
 
-// 第一階段招式循環(秒)。每一下都有預警:尖端先着燈 / 碎片先彈警示圈,
-// 玩家睇得出下一步,先可以走位 —— 舊嗰三招係冇預警嘅。
-const BOSS_CYCLE = 5;
-const BOSS_VOLLEY_AT = .45;    // 第一個尖端幾時開火
-const BOSS_TIP_GAP = .25;      // 尖端之間差幾耐
-const BOSS_TIP_GLOW = .65;     // 着燈維持幾耐
-const BOSS_FLING_WARN = 2.6;   // 碎片警示圈幾時出
-const BOSS_FLING_AT = 2.9;     // 碎片幾時掟出嚟
-const BOSS_FLING_ANGLES = [150, 90, 30];
-
-// 第一階段:兩招輪住嚟。打到一半血轉第二階段,用返舊嗰三招(冇預警、更亂)
-const bossPhase = b => (b.hp / b.maxhp > .5 ? 1 : 2);
-
-// 某個時刻到咗、而且今個循環未出過 → 出手一次
-function bossDue(b, at, bit) {
-  if (b.cycle < at || (b.done & bit)) return false;
-  b.done |= bit;
-  return true;
-}
-
-// 尖端着燈嘅光度(0 = 冇);render 同 update 共用同一條時序,唔會各計各
-function bossTipGlow(b, i) {
-  const u = b.cycle - i * BOSS_TIP_GAP;
-  if (u < 0 || u > BOSS_TIP_GLOW) return 0;
-  return 1 - u / BOSS_TIP_GLOW;
-}
-
-const bossFlingWarn = b =>
-  b.cycle >= BOSS_FLING_WARN && b.cycle < BOSS_FLING_AT
-    ? (b.cycle - BOSS_FLING_WARN) / (BOSS_FLING_AT - BOSS_FLING_WARN) : 0;
-
-// 由本地座標(BOSS 圖係 300×180)換做畫面座標
-const bossLocalToWorld = (b, lx, ly) => {
-  const s = b.r * 2 / 190;
-  return [b.x + (lx - 150) * s, b.y + (ly - BOSS_CORE_Y) * s];
-};
-
-function volleyFromTip(b, i) {
-  const tips = BOSS_ART.tips;
-  const [x, y] = bossLocalToWorld(b, tips[i][0], tips[i][1]);
-  const spread = -30 + i * (tips.length > 1 ? 60 / (tips.length - 1) : 0);
-  for (const d of [-10, 0, 10]) {
-    eshoot(x, y, Math.PI / 2 - (spread + d) * Math.PI / 180, 320, '#4FD1C5');
-  }
-}
-
-// 碎片掟向玩家:沿一條弧線飛過去,唔係直線,所以要記住成條路徑
-function flingShards(b) {
-  for (const deg of BOSS_FLING_ANGLES) {
-    const a = deg * Math.PI / 180 + b.t * SHARD_SPIN;
-    const [x, y] = bossLocalToWorld(b, 150 + Math.cos(a) * 138, BOSS_CORE_Y + Math.sin(a) * 46);
-    ebullets.push({
-      x, y, vx: 0, vy: 0, r: 8, color: '#4FD1C5',
-      path: { x0: x, y0: y, cx: (x + player.x) / 2, cy: y + 140,
-              x1: player.x, y1: player.y, t: 0, dur: 1.2 },
-    });
-  }
-}
-
-function updateBossPhase1(b, dt) {
-  b.cycle += dt;
-  if (b.cycle >= BOSS_CYCLE) { b.cycle -= BOSS_CYCLE; b.done = 0; }
-  b.mode = b.cycle < BOSS_FLING_WARN ? 0 : 1;
-
-  for (let i = 0; i < BOSS_ART.tips.length; i++) {
-    if (bossDue(b, BOSS_VOLLEY_AT + i * BOSS_TIP_GAP, 1 << i)) volleyFromTip(b, i);
-  }
-  if (bossDue(b, BOSS_FLING_AT, 1 << 30)) flingShards(b);
-}
-
-function updateBoss(b, dt) {
-  if (b.y < 135) { b.y += 55 * dt; return; }
-  b.x = W / 2 + Math.sin(b.t * .65) * (W / 2 - 75);
-  b.y = 135 + Math.sin(b.t * 1.3) * 14;
-
-  b.phase = bossPhase(b);
-  if (b.phase === 1) return updateBossPhase1(b, dt);
-
-  b.modeT -= dt;
-  if (b.modeT <= 0) { b.mode = (b.mode + 1) % 3; b.modeT = 4.5; b.fireT = .4; }
-  b.fireT -= dt;
-  if (b.fireT > 0) return;
-
-  const hurt = 1 - b.hp / b.maxhp;
-  if (b.mode === 0) {
-    b.fireT = .85 - hurt * .3;
-    const a = aimAt(b.x, b.y + 40);
-    for (const off of [-.22, 0, .22]) eshoot(b.x, b.y + 40, a + off, 250);
-  } else if (b.mode === 1) {
-    b.fireT = 1.5 - hurt * .5;
-    const n = 14 + Math.floor(hurt * 10);
-    for (let i = 0; i < n; i++) eshoot(b.x, b.y + 20, (i / n) * Math.PI * 2 + b.t, 175, '#ffb35c');
-  } else {
-    b.fireT = .16;
-    eshoot(b.x + Math.sin(b.t * 7) * 42, b.y + 34, Math.PI / 2 + Math.sin(b.t * 3) * .5, 300, '#9b8bff');
-  }
-}
-
 // 過場時序(秒,由 BOSS 中最後一擊嗰刻計起)。照設計圖,改 FINALE_SPEED 就可以整體快慢。
 const FINALE_SPEED = 1.75;
 const FINALE = {
@@ -269,10 +217,13 @@ function startFinale(boss) {
   game.state = 'finale';
   game.finaleT = 0;
   game.finaleDone = 0;
-  game.finaleX = boss.x;
-  game.finaleY = boss.y;
-  game.finaleBar = clamp((boss.hp + 1) / boss.maxhp, 0, 1);   // 最後一擊之前條血條去到邊
+  game.finaleX = bossFocusX(boss);
+  game.finaleY = bossFocusY(boss);
+  game.finaleKind = boss.kind;             // BOSS 爆咗之後 HUD 仲要知道寫邊個名
+  game.finaleColor = boss.core || BOSS_TONE.core;
+  game.finaleBar = clamp((boss.hp + (boss.lastDmg || 1)) / boss.maxhp, 0, 1);   // 最後一擊之前條血條去到邊
   game.finaleReward = boss.score;
+  game.clearShots = true;      // BOSS 死咗,佢臨死前射嗰啲彈唔應該喺度等玩家返嚟食
   shake(18);
 }
 
@@ -285,10 +236,12 @@ function updateFinale(dt) {
   if (t >= FINALE.burst && !(game.finaleDone & 1)) {
     game.finaleDone |= 1;
     if (boss) {
-      explode(boss.x, boss.y, boss.color, 90, 460);
-      drop(boss.x - 26, boss.y, 'power');
-      drop(boss.x + 26, boss.y, 'shield');
-      drop(boss.x, boss.y, 'life');
+      const x = game.finaleX, y = game.finaleY, def = BOSSES[boss.kind];
+      if (def.burst) def.burst(boss);
+      explode(x, y, boss.color, 90, 460);
+      drop(x - 26, y, 'power');
+      drop(x + 26, y, 'shield');
+      drop(x, y, 'life');
       enemies.splice(enemies.indexOf(boss), 1);
     }
     shake(26);
@@ -296,31 +249,32 @@ function updateFinale(dt) {
 
   if (t >= FINALE.pick && !(game.finaleDone & 2)) {
     game.finaleDone |= 2;
-    openPicker(true);            // true = 由下面滑上嚟
+    if (pickDue()) {
+      openPicker(true);          // true = 由下面滑上嚟
+    } else {
+      game.state = 'playing';    // 唔使揀嘢就接返落去,等 updateWave 開下一波
+      game.gap = 0;
+    }
   }
 }
 
 function killEnemy(e, i, scored = true) {
-  const boss = e.type === 'boss';
   if (scored) {
     game.crystals += Math.round(e.score * comboMult());
     game.combo++;
     game.comboT = COMBO_WINDOW;
   }
-  // BOSS 波:唔即刻剷走,交畀過場處理(爆炸同掉寶都喺過場入面做)
-  if (boss && game.wave % PICK_EVERY === 0) return startFinale(e);
+  // BOSS:唔即刻剷走,交畀過場處理(爆炸同掉寶都喺 updateFinale() 入面做)。
+  // 同「使唔使揀能力」冇關係 —— BOSS 幾多波一隻同幾多波揀一次可以唔同。
+  if (e.type === 'boss') return startFinale(e);
 
   enemies.splice(i, 1);
-  explode(e.x, e.y, e.color, boss ? 90 : 22, boss ? 460 : 260);
-  shake(boss ? 24 : 6);
-  if (boss) {
-    drop(e.x - 26, e.y, 'power'); drop(e.x + 26, e.y, 'shield'); drop(e.x, e.y, 'life');
-  } else {
-    const r = Math.random();
-    if (r < .1) drop(e.x, e.y, 'power');
-    else if (r < .15) drop(e.x, e.y, 'shield');
-    else if (r < .165) drop(e.x, e.y, 'life');
-  }
+  explode(e.x, e.y, e.color, 22, 260);
+  shake(6);
+  const r = Math.random();
+  if (r < .1) drop(e.x, e.y, 'power');
+  else if (r < .15) drop(e.x, e.y, 'shield');
+  else if (r < .165) drop(e.x, e.y, 'life');
 }
 
 // ---------- 子彈 ----------
@@ -331,9 +285,11 @@ function updateBullets(dt) {
     if (b.y < -20 || b.x < -20 || b.x > W + 20) { bullets.splice(i, 1); continue; }
     for (let j = enemies.length - 1; j >= 0; j--) {
       const e = enemies[j];
-      if (dist2(b, e) < (b.r + e.r) ** 2) { // when bullet hit enemy
+      const dmg = enemyHit(e, b);
+      if (dmg) {
         bullets.splice(i, 1);
-        e.hp--; e.flash = 1;
+        e.hp -= dmg; e.flash = 1; e.lastDmg = dmg;
+        e.hitX = b.x; e.hitY = b.y;     // 過場要知最後一槍喺邊(星蛇個頭可能喺畫面外)
         explode(b.x, b.y, '#cfe8ff', 4, 90);
         if (e.hp <= 0) killEnemy(e, j);
         break;
@@ -392,6 +348,10 @@ function updatePowerups(dt) {
 function update(dt) {
   if (game.paused) return;   // 暫停:連背景星星同粒子都唔郁,成個畫面定格
 
+  // 清場:一定要喺所有 loop 之外做(見 DEVLOG 第一篇),亦要喺下面啲 state 閘之前 ——
+  // 過場同揀能力都會標呢個旗,擺喺最尾嘅話呢兩個 state 永遠行唔到。
+  if (game.clearShots) { ebullets.length = 0; game.clearShots = false; }
+
   for (const s of stars) { s.y += s.v * dt; if (s.y > H) { s.y = -2; s.x = rand(0, W); } }
   for (let i = particles.length - 1; i >= 0; i--) {
     const p = particles[i];
@@ -412,7 +372,4 @@ function update(dt) {
   updateEnemies(dt);
   updateBullets(dt);
   updatePowerups(dt);
-
-  // cleared out here, never inside hitPlayer(), so no loop is walking ebullets
-  if (game.clearShots) { ebullets.length = 0; game.clearShots = false; }
 }

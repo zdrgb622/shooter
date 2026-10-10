@@ -10,7 +10,7 @@ function bossAt(waveCycle = 0) {
   const game = loadGame();
   const { g } = game;
   game.startClean();
-  game.run('enemies.length = 0; game.queue.length = 0; spawnEnemy("boss");');
+  game.run('enemies.length = 0; game.queue.length = 0; spawnBoss("crystal");');
   const b = g.enemies[0];
   b.y = 140;                 // 當佢已經飛到定位,唔使等入場
   b.cycle = waveCycle;
@@ -97,12 +97,35 @@ test('掟出嚟嘅碎片會飛到玩家嗰邊,到咗之後改行直線', () => {
   assert.ok(Math.hypot(near.vx, near.vy) > 0, '之後要有速度繼續飛出畫面');
 });
 
-test('第二階段唔再用預警招式', () => {
+test('過咗半血唔會即刻轉階段,要打完而家呢一招先轉', () => {
   const { g, b } = bossAt();
   b.hp = b.maxhp * .3;
-  b.fireT = 0; b.modeT = 9; b.mode = 0;
   g.updateBoss(b, 1 / 60);
-  assert.equal(b.phase, 2);
+  assert.equal(b.phase, 1, '一招未打完,唔應該半途轉');
+
+  let frames = 0;
+  while (b.phase === 1 && frames++ < 60 * (g.BOSS_CYCLE + 1)) g.updateBoss(b, 1 / 60);
+  assert.equal(b.phase, 2, '打完呢個循環就應該轉');
+
+  g.ebullets.length = 0;
+  for (let i = 0; i < 60 * 2; i++) g.updateBoss(b, 1 / 60);
   assert.ok(g.ebullets.length > 0, '第二階段照樣會開火');
   assert.ok(g.ebullets.every(s => !s.path), '第二階段嘅彈唔行弧線');
+});
+
+test('亮咗燈嘅齊射一定會射出嚟,就算中途跌穿半血', () => {
+  // 舊做法每幀睇血量,尖端着緊燈嗰陣跌穿 50% 就即刻轉階段,燈亮咗但冇射 —— 失約嘅預警
+  const { g, b } = bossAt();
+  b.cycle = g.BOSS_VOLLEY_AT - .2;
+  assert.ok(g.bossTipGlow(b, 0) > 0, '前提:第一個尖端已經着緊燈');
+  b.hp = b.maxhp * .3;
+  for (let i = 0; i < 60 * 2; i++) g.updateBoss(b, 1 / 60);
+  assert.equal(g.ebullets.filter(s => s.color === '#4FD1C5').length, 15, '五個尖端都要射晒');
+});
+
+test('一下爆傷跨過幾個門檻,直接去最低嗰個階段', () => {
+  const { g, b } = bossAt();
+  g.BOSSES.crystal.phases.splice(1, 0, { over: .3, moves: g.BOSSES.crystal.phases[1].moves });
+  b.hp = b.maxhp * .1;
+  assert.equal(g.bossPhase(b), 3, '唔係一級一級咁跌');
 });

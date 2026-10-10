@@ -3,6 +3,7 @@
 一個用純 HTML + CSS + JavaScript 寫嘅太空射擊小遊戲。冇框架、冇 build step、冇任何相依套件 —— 打開就玩得。
 
 開發過程遇到嘅問題同解決方法,記錄喺 [DEVLOG.md](DEVLOG.md)（英文)。
+敵機同 BOSS 嘅運作同點樣加新嘅,見 [ENEMIES.md](ENEMIES.md);想調數值就睇 [TUNING.md](TUNING.md)。
 
 ## 試玩
 
@@ -18,31 +19,46 @@
 | 重新開始 | R |
 | 切換語言 | L 或者撳開始畫面下面嘅按鈕 |
 
-亦可以用滑鼠拖住玩 —— 撳住即自動開火。
+亦可以用滑鼠或者手指拖住玩 —— 撳住即自動開火。
+**手掣**都支援:左搖桿 / 十字鍵移動、A 或 RT 開火、Start 暫停。
 
 ## 內容
 
 - 三種敵機：直衝、俯衝、會瞄準你射擊嘅炮台
-- 每 5 波一隻 BOSS,有三種攻擊模式（追蹤三連發、圓形彈幕、掃射）
+- 兩隻 BOSS 輪住出,各有兩個階段,打到一半血轉招式(只喺打完一招先轉,唔會打斷預警咗嘅攻擊)
+- **虛空星蛇**:24 節長嘅星蛇,冇子彈、全部靠條身 —— 潛伏頭槌(撞完卡住打頭雙倍)、沿畫面邊兜圈直插、斜插、三連衝、圍住你打圈;第二階段轉紫
+- **水晶核**:
+  - 前半血用有預警嘅招式(晶體尖端逐個着燈 → 晶簇齊射;警示圈 → 掟碎片弧線飛過嚟)
+  - 後半血轉去三種更亂嘅模式(追蹤三連發、圓形彈幕、掃射)
+  - 打低之後有一段死亡過場:血條瀉零 → 光環 → 碎片炸開 → 白閃
+- **連擊**:連續擊殺而唔中彈就累積倍數,最高 2 倍晶體收入。中彈即斷
+- **揀能力**:打完 BOSS 波出三張卡揀一個(散射砲、加速槍機、推進器、能量護盾、磁吸、額外生命),
+  唔滿意可以用晶體重抽
 - 掉寶：黃色 P 加火力（最高 5 級）、藍色 S 加護盾、粉色 ♥ 加命
 - 粒子爆炸、震屏、星空視差背景
-- 最高分紀錄（存喺瀏覽器 localStorage）
+- 最高晶體紀錄（存喺瀏覽器 localStorage）
 - 三種語言：繁體中文 / 简体中文 / English
 
 ## 檔案結構
 
 ```
-index.html        頁面外殼:一個 canvas + script 載入次序
-css/style.css     canvas 擺位同外框
+index.html        頁面外殼:canvas + 能力選擇 overlay + script 載入次序
+css/style.css     canvas 擺位、能力選擇畫面、配色變數
 js/core.js        共用狀態（player / enemies / bullets…）同工具函數
 js/i18n.js        三種語言嘅文字表
-js/input.js       鍵盤同滑鼠狀態
-js/entities.js    遊戲邏輯:波次、敵機、BOSS、子彈、碰撞、掉寶
-js/render.js      全部繪圖:戰機、敵機、HUD、標題畫面
+js/abilities.js   能力表、出現規則、重抽價錢
+js/sprites.js     美術:戰機、敵機、子彈、兩隻 BOSS(水晶核、虛空星蛇)
+js/input.js       鍵盤、手指 / 滑鼠、手掣 → 統一嘅移動意圖
+js/entities.js    遊戲邏輯:波次、小怪、子彈、碰撞、過場、掉寶
+js/bosses.js      BOSS 表:每隻 BOSS 嘅血、樣、招式同階段
+js/render.js      全部 canvas 繪圖:HUD、標題畫面、過場
+js/ui.js          能力選擇畫面（DOM,唔係畫喺 canvas）
 js/main.js        主迴圈:每幀 update(dt) → draw()
 ```
 
-設計原則係**邏輯同畫面分離**:`entities.js` 只管「嘢喺邊、發生咩事」,`render.js` 只管「點樣畫出嚟」。改難度就開 `entities.js`,改畫風就開 `render.js`。
+設計原則係**邏輯同畫面分離**:`entities.js` 只管「嘢喺邊、發生咩事」,`render.js` 同 `sprites.js` 只管「點樣畫出嚟」。改難度就開 `entities.js`,改畫風就開 `sprites.js`。
+
+能力選擇畫面係**唯一一個唔畫喺 canvas 嘅畫面** —— 用 DOM overlay,因為 canvas 喺手機上會縮到約 0.75,細字會睇唔清,而且中文自動換行同捲動交畀瀏覽器做會穩陣好多。
 
 用普通 `<script>` 標籤而唔用 ES module,咁樣 `file://` 直接開都行(module 會被 CORS 擋住)。代價係載入次序有關係 —— `core.js` 一定要排第一。
 

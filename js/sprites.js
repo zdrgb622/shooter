@@ -234,3 +234,264 @@ function drawBossArt(e) {
   }
   ctx.restore();
 }
+
+// 水晶核喺 BOSSES 表入面嘅畫法:平移到 BOSS 個位再畫(drawBossArt 用本地座標)
+function drawCrystalBoss(e) {
+  ctx.save();
+  ctx.translate(e.x, e.y);
+  drawBossArt(e);
+  ctx.restore();
+}
+
+// ---------- BOSS:虛空星蛇(本地座標,向住 +x;照設計嘅 SVG 抄) ----------
+
+const SERPENT_ART = {
+  outline: [[24.9, 10.3], [10.3, 24.9], [-10.3, 24.9], [-24.9, 10.3], [-24.9, -10.3], [-10.3, -24.9], [10.3, -24.9], [24.9, -10.3]],
+  seg: [[23.1, 9.6], [9.6, 23.1], [-9.6, 23.1], [-23.1, 9.6], [-23.1, -9.6], [-9.6, -23.1], [9.6, -23.1], [23.1, -9.6]],
+  segIn: [[13.8, 0], [6.9, 11.9], [-6.9, 11.9], [-13.8, 0], [-6.9, -11.9], [6.9, -11.9]],
+  legs: [[-3, 26, -8, 39], [-3, -26, -8, -39]],          // 兩條腳,開放線段
+  tail: [[-23, -8], [-55, 0], [-23, 8]],
+  head: [[-25.5, -28.9], [15.3, -25.5], [44.2, -10.2], [44.2, 10.2], [15.3, 25.5], [-25.5, 28.9]],
+  headIn: [[-15.3, -17], [11.9, -15.3], [25.5, 0], [11.9, 15.3], [-15.3, 17]],
+  jawL: [[40.8, -11.9], [68, -22.1], [59.5, -5.1]],
+  jawR: [[40.8, 11.9], [68, 22.1], [59.5, 5.1]],
+  eyeL: [[17, -18.7], [30.6, -11.9], [20.4, -8.5]],
+  eyeR: [[17, 18.7], [30.6, 11.9], [20.4, 8.5]],
+};
+const SERPENT_TONE = { body: '#132A3A', dark: '#0B1026', red: '#FF4D6D', redEdge: '#FFD6E0' };
+
+// 多邊形:用 for 迴圈,唔用 forEach —— 呢度每幀要畫成百次,唔想每次都整一個新 function
+function polyPath(pts) {
+  ctx.moveTo(pts[0][0], pts[0][1]);
+  for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i][0], pts[i][1]);
+  ctx.closePath();
+}
+
+function poly(pts, fill, stroke, lw) {
+  ctx.beginPath(); polyPath(pts);
+  if (fill) { ctx.fillStyle = fill; ctx.fill(); }
+  if (stroke) { ctx.strokeStyle = stroke; ctx.lineWidth = lw; ctx.lineJoin = 'round'; ctx.stroke(); }
+}
+
+// 預警閃:先亮、之後喺 0.9 同 0.35 之間閃(每 0.35 秒一下),最尾 0.3 秒淡出 —— 照設計
+function warnAlpha(now, t0, t1) {
+  if (now < t0 || now >= t1) return 0;
+  if (now < t0 + .12) return .9 * (now - t0) / .12;
+  if (now > t1 - .3) return .95 * (t1 - now) / .3;
+  const u = (now - t0 - .12) / .35;
+  return .35 + .55 * Math.abs((u % 2) - 1);
+}
+
+function drawBadge(x, y, color) {         // 圓形「!」
+  ctx.fillStyle = color;
+  ctx.beginPath(); ctx.arc(x, y, 22, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = SERPENT_TONE.dark;
+  ctx.font = '700 26px "Chakra Petch", monospace';
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText('!', x, y + 1);
+}
+
+function drawDashedCircle(x, y, r, color) {
+  ctx.strokeStyle = color; ctx.lineWidth = 2;
+  ctx.setLineDash([8, 6]);
+  ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.stroke();
+  ctx.setLineDash([]);
+}
+
+// 準星四個角(頭槌鎖定 / 觀望玩家都用)
+function drawCorners(x, y, half, len, color, lw) {
+  ctx.strokeStyle = color; ctx.lineWidth = lw; ctx.lineCap = 'round';
+  ctx.beginPath();
+  for (let sx = -1; sx <= 1; sx += 2) for (let sy = -1; sy <= 1; sy += 2) {
+    ctx.moveTo(x + sx * half, y + sy * (half - len));
+    ctx.lineTo(x + sx * half, y + sy * half);
+    ctx.lineTo(x + sx * (half - len), y + sy * half);
+  }
+  ctx.stroke();
+  ctx.lineCap = 'butt';
+}
+
+// 地上嘅預警(畫喺條蛇下面)
+function drawSerpentWarnsUnder(e) {
+  const now = e.cycle;
+  for (let i = 0; i < e.nWarn; i++) {
+    const w = e.warns[i];
+    const a = warnAlpha(now, w.t0, w.t1);
+    if (a <= 0) continue;
+    ctx.globalAlpha = a;
+    if (w.kind === 'col') {                       // 一條直嘅衝刺路線
+      ctx.fillStyle = e.core;
+      ctx.globalAlpha = a * .16; ctx.fillRect(w.x - 28, 0, 56, H);
+      ctx.globalAlpha = a; ctx.fillRect(w.x - 28, 0, 2, H); ctx.fillRect(w.x + 26, 0, 2, H);
+    } else if (w.kind === 'diag') {               // 斜插嘅路線
+      ctx.save(); ctx.translate(w.x, w.y); ctx.rotate(w.a);
+      ctx.fillStyle = e.core;
+      ctx.globalAlpha = a * .16; ctx.fillRect(-900, -28, 1800, 56);
+      ctx.globalAlpha = a; ctx.fillRect(-900, -28, 1800, 2); ctx.fillRect(-900, 26, 1800, 2);
+      ctx.restore();
+    } else if (w.kind === 'ring' || w.kind === 'safe') {   // 包圍:大圈 = 佢會兜嘅範圍,細圈 = 安全位
+      drawDashedCircle(w.x, w.y, w.r, e.core);
+    } else if (w.kind === 'lunge') {              // 頭槌:由個頭拉出嚟嘅紅色虛線
+      ctx.save(); ctx.translate(w.x, w.y); ctx.rotate(w.a);
+      ctx.fillStyle = SERPENT_TONE.red;
+      ctx.globalAlpha = a * .14;
+      ctx.fillRect(0, -20, w.r, 40);
+      ctx.globalAlpha = a;
+      for (let x = 0; x < w.r; x += 20) ctx.fillRect(x, -1, Math.min(12, w.r - x), 2);
+      ctx.restore();
+    }
+  }
+  ctx.globalAlpha = 1;
+}
+
+// 浮喺條蛇上面嘅標記
+function drawSerpentWarnsOver(e) {
+  const now = e.cycle;
+  for (let i = 0; i < e.nWarn; i++) {
+    const w = e.warns[i];
+    if (w.kind === 'lock') {                      // 頭槌準星:由大縮細、轉正
+      if (now < w.t0 || now >= w.t1) continue;
+      const u = Math.min(1, (now - w.t0) / .2);
+      const fade = now > w.t1 - .3 ? (w.t1 - now) / .3 : 1;
+      ctx.save(); ctx.translate(w.x, w.y);
+      ctx.rotate((1 - u) * Math.PI / 4);
+      ctx.globalAlpha = u * fade;
+      const k = 1.8 - .8 * u;
+      drawCorners(0, 0, 38 * k, 16 * k, SERPENT_TONE.red, 2.6);
+      ctx.fillStyle = SERPENT_TONE.red;
+      ctx.beginPath(); ctx.arc(0, 0, 4, 0, Math.PI * 2); ctx.fill();
+      ctx.restore();
+      continue;
+    }
+    const a = warnAlpha(now, w.t0, w.t1);
+    if (a <= 0) continue;
+    ctx.globalAlpha = Math.min(1, a + .1);
+    if (w.kind === 'col' || w.kind === 'ring') drawBadge(w.x, 126, e.core);
+    else if (w.kind === 'diag') {
+      // 「!」擺喺條線入畫面附近(y = 150)
+      const k = Math.abs(Math.sin(w.a)) > .1 ? (150 - w.y) / Math.sin(w.a) : 0;
+      drawBadge(clamp(w.x + Math.cos(w.a) * k, 30, W - 30), 150, e.core);
+    }
+  }
+  ctx.globalAlpha = 1;
+}
+
+function drawSerpent(e) {
+  // 時間用 now,唔好叫 t —— t 係 i18n 嘅文字 function,遮住咗下面就攞唔到「破綻!」
+  const now = e.t, th = SERPENT.thick, n = SERPENT.nodes;
+  ctx.save();
+  if (e.dying) ctx.translate(rand(-4, 4), rand(-2, 2));
+
+  drawSerpentWarnsUnder(e);
+
+  // 觀望緊:玩家四圍有個淡淡嘅框,話畀你知佢望住你
+  if (e.stage === 'watch') {
+    const pulse = .5 - .5 * Math.cos(now / 1.4 * Math.PI * 2);
+    ctx.globalAlpha = .35 + .4 * pulse;
+    drawCorners(player.x, player.y - 4, 42 * (1 + .12 * pulse), 14, e.core, 2);
+    ctx.globalAlpha = 1;
+  }
+
+  // 身:由條尾畫起,個頭先會蓋喺最上面
+  for (let k = n - 1; k >= 1; k--) {
+    const x = e.segX[k], y = e.segY[k];
+    if (x < -70 || x > W + 70 || y < -70 || y > H + 70) continue;   // 畫面外唔使畫
+    const sc = SERPENT_SCALE[k], a = e.segA[k];
+    const wave = 3 * Math.sin((now + k * .16) / 2.6 * Math.PI * 2);   // 身體左右輕輕擺(純畫面)
+    ctx.save();
+    ctx.translate(x - Math.sin(a) * wave, y + Math.cos(a) * wave);
+    ctx.rotate(a);
+    ctx.scale(sc, sc * th);
+    if (k === n - 1) poly(SERPENT_ART.tail, e.edge, SERPENT_TONE.dark, 2);
+    ctx.strokeStyle = e.edge; ctx.lineWidth = 2.6; ctx.lineCap = 'round';
+    ctx.beginPath();
+    for (let j = 0; j < 2; j++) {
+      const l = SERPENT_ART.legs[j];
+      ctx.moveTo(l[0], l[1]); ctx.lineTo(l[2], l[3]);
+    }
+    ctx.stroke(); ctx.lineCap = 'butt';
+    poly(SERPENT_ART.outline, null, SERPENT_TONE.dark, 9);
+    poly(SERPENT_ART.seg, SERPENT_TONE.body, e.edge, 2.4);
+    poly(SERPENT_ART.segIn, SERPENT_TONE.dark, e.edge, 1);
+    // 每節中間一粒光,錯開相位咁呼吸
+    const p = .5 - .5 * Math.cos((now + k * .11) / 2.8 * Math.PI * 2);
+    ctx.globalAlpha = .55 + .45 * p;
+    ctx.fillStyle = e.core;
+    ctx.beginPath(); ctx.arc(0, 0, 7.1 * (.85 + .3 * p), 0, Math.PI * 2); ctx.fill();
+    const white = Math.max(e.pflash, k === e.hitK ? e.flash : 0);
+    if (white > 0) { ctx.globalAlpha = white * .55; poly(SERPENT_ART.seg, '#fff'); }
+    ctx.globalAlpha = 1;
+    ctx.restore();
+  }
+
+  // 頭
+  ctx.save();
+  ctx.translate(e.x, e.y);
+  ctx.rotate(e.angle + e.aim);
+  if (e.stage === 'stuck') {                     // 撞完卡住:個頭震吓震吓,越震越細
+    const k = Math.max(0, 1 - e.stageT / SERPENT_LURK.stuck);
+    ctx.translate(rand(-4, 4) * k, rand(-2, 2) * k);
+    ctx.rotate(rand(-.09, .09) * k);
+  }
+  // 伸脷:觀望嗰陣間唔中「嘶」一下
+  if (e.stage === 'watch' && (now % 2.4) < .3) {
+    const f = Math.sin((now % 2.4) / .3 * Math.PI);
+    ctx.strokeStyle = SERPENT_TONE.red; ctx.lineWidth = 2.4; ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(44, 0); ctx.lineTo(44 + 20 * f, 0);
+    ctx.lineTo(44 + 28 * f, -6 * f);
+    ctx.moveTo(44 + 20 * f, 0); ctx.lineTo(44 + 28 * f, 6 * f);
+    ctx.stroke(); ctx.lineCap = 'butt';
+  }
+  ctx.scale(1, th);
+  poly(SERPENT_ART.jawL, e.edge, SERPENT_TONE.dark, 2);
+  poly(SERPENT_ART.jawR, e.edge, SERPENT_TONE.dark, 2);
+  poly(SERPENT_ART.head, null, SERPENT_TONE.dark, 9);
+  poly(SERPENT_ART.head, SERPENT_TONE.body, e.edge, 2.6);
+  poly(SERPENT_ART.headIn, SERPENT_TONE.dark, e.edge, 1);
+  if (e.eyesRed) {
+    ctx.save(); ctx.scale(1.15, 1);
+    poly(SERPENT_ART.eyeL, SERPENT_TONE.red, SERPENT_TONE.redEdge, 1);
+    poly(SERPENT_ART.eyeR, SERPENT_TONE.red, SERPENT_TONE.redEdge, 1);
+    ctx.restore();
+  } else {
+    ctx.globalAlpha = .75 + .25 * Math.sin(now * 2.2);
+    poly(SERPENT_ART.eyeL, e.core); poly(SERPENT_ART.eyeR, e.core);
+    ctx.globalAlpha = 1;
+  }
+  const white = Math.max(e.pflash, e.hitK === 0 ? e.flash : 0);
+  if (white > 0) { ctx.globalAlpha = white * .55; poly(SERPENT_ART.head, '#fff'); ctx.globalAlpha = 1; }
+  ctx.restore();
+
+  drawSerpentWarnsOver(e);
+
+  // 撞落去嗰下:撞擊圈 + 一閃白
+  const since = e.cycle - e.impactT;
+  if (since >= 0 && since < .6) {
+    const u = since / .6;
+    ctx.globalAlpha = 1 - u;
+    ctx.strokeStyle = e.edge; ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.arc(e.lockX, e.lockY, 18 + u * 96, 0, Math.PI * 2); ctx.stroke();
+    if (since < .27) {
+      ctx.globalAlpha = .22 * (1 - since / .27);
+      ctx.fillStyle = '#fff'; ctx.fillRect(-30, -30, W + 60, H + 60);
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  // 「破綻!」:卡住嗰陣浮喺個頭上面
+  if (e.weak) {
+    const u = Math.min(1, e.stageT / .15);
+    ctx.globalAlpha = u;
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    const tx = clamp(e.x, 60, W - 60), ty = clamp(e.y - 62 + 8 * (1 - u), 90, H - 40);
+    ctx.font = '900 18px "Noto Sans TC", sans-serif';
+    ctx.fillStyle = e.edge;
+    ctx.fillText(t('weakTag'), tx, ty);
+    ctx.font = '11px "Noto Sans TC", sans-serif';
+    ctx.fillStyle = ART.hudText;
+    ctx.fillText(t('weakHint'), tx, ty + 20);
+    ctx.globalAlpha = 1;
+  }
+  ctx.restore();
+}

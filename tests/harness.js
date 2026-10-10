@@ -10,7 +10,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 
 const ROOT = path.join(__dirname, '..');
-const SCRIPTS = ['core', 'i18n', 'abilities', 'sprites', 'input', 'entities', 'render', 'ui', 'main'];
+const SCRIPTS = ['core', 'i18n', 'abilities', 'sprites', 'input', 'entities', 'bosses', 'render', 'ui', 'main'];
 
 const noop = () => {};
 
@@ -98,7 +98,10 @@ function loadGame() {
       win.fire(down ? 'keydown' : 'keyup', { code, preventDefault: noop });
     },
 
-    pointerDown(x, y) { cvs.fire('pointerdown', { clientX: x, clientY: y, pointerId: 1 }); },
+    // pointerType 預設 'touch'(手機);想當滑鼠就傳 'mouse',因為兩者影響 inputMode
+    pointerDown(x, y, pointerType = 'touch') {
+      cvs.fire('pointerdown', { clientX: x, clientY: y, pointerId: 1, pointerType });
+    },
     pointerMove(x, y) { cvs.fire('pointermove', { clientX: x, clientY: y, pointerId: 1 }); },
     pointerUp() { cvs.fire('pointerup', { pointerId: 1 }); },
 
@@ -115,6 +118,21 @@ function loadGame() {
       return pad;
     },
     unplugGamepad() { gamepads.length = 0; },
+
+    // 搵一個合用嘅波數。千祈唔好喺測試度寫死「第 5 波」——
+    // WAVE.bossEvery 同 PICK_EVERY 都係俾人試玩時調嘅,寫死就會無端端紅一堆。
+    //   boss: true = 要 BOSS 波 / false = 要普通波
+    //   pick: true = 打完要揀能力 / false = 唔使揀 / null = 唔理
+    // 搵唔到就回傳 null(例如 PICK_EVERY 係 1,就冇「唔使揀」嘅波)。
+    findWave({ boss = true, pick = null } = {}) {
+      const every = run('WAVE.bossEvery'), p = run('PICK_EVERY');
+      for (let w = 1; w <= 200; w++) {
+        if ((w % every === 0) !== boss) continue;
+        if (pick !== null && (w % p === 0) !== pick) continue;
+        return w;
+      }
+      return null;
+    },
 
     // 開一局,清走所有敵人同子彈,戰機放喺已知狀態 —— 大部分測試嘅起點。
     // 命、護盾、火力都明確設定,唔靠遊戲嘅預設值:

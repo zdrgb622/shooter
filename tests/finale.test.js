@@ -9,11 +9,13 @@ const { loadGame } = require('./harness');
 // 測試唔可以當佢一定係 1,否則一調速就會無端端紅一堆。
 const frames = (g, seconds) => Math.ceil(60 * seconds / g.FINALE_SPEED);
 
-function killBoss() {
+// 打低一隻 BOSS。wave 唔寫就搵一個「係 BOSS 波、而且打完要揀能力」嘅波數。
+function killBoss(wave) {
   const game = loadGame();
   const { g } = game;
   game.startClean();
-  game.run('game.wave = 5; enemies.length = 0; game.queue.length = 0; spawnEnemy("boss");');
+  const w = wave ?? game.findWave({ boss: true, pick: true });
+  game.run(`game.wave = ${w}; enemies.length = 0; game.queue.length = 0; spawnBoss("crystal");`);
   const boss = g.enemies[0];
   boss.y = 200;
   boss.hp = 1;
@@ -49,10 +51,29 @@ test('晶體即刻入帳,唔使等過場完', () => {
   assert.equal(g.game.finaleReward, 3000, '過場顯示嘅獎勵係 BOSS 嘅分值');
 });
 
-test('過場期間遊戲定格,但粒子照郁', () => {
+test('BOSS 臨死前射嘅彈會清走,唔會等玩家返嚟先食', () => {
+  const game = loadGame();
+  const { g } = game;
+  game.startClean();
+  const w = game.findWave({ boss: true, pick: true });
+  game.run(`game.wave = ${w}; enemies.length = 0; game.queue.length = 0; spawnBoss("crystal");`);
+  const boss = g.enemies[0];
+  boss.y = 200; boss.hp = 1;
+  g.eshoot(240, 300, Math.PI / 2, 300);
+  g.eshoot(200, 280, Math.PI / 2, 300);
+  assert.equal(g.ebullets.length, 2);
+
+  g.bullets.push({ x: boss.x, y: boss.y, vx: 0, vy: 0, r: 4 });
+  g.updateBullets(1 / 60);
+  game.step(2);
+  assert.equal(g.ebullets.length, 0, 'BOSS 一死就應該清場');
+});
+
+test('過場期間遊戲定格,但粒子照演', () => {
   const { game, g } = killBoss();
-  g.eshoot(100, 100, Math.PI / 2, 300);
-  const y0 = g.ebullets[0].y;
+  g.spawnEnemy('grunt');
+  const e = g.enemies.find(x => x.type === 'grunt');
+  const ey = e.y;
 
   // 自己放幾粒粒子落去,唔好靠「爆炸嗰陣啱啱好有幾多粒」——
   // 數量會隨時間同 FINALE_SPEED 變,用嚟做判斷會時好時壞
@@ -61,7 +82,7 @@ test('過場期間遊戲定格,但粒子照郁', () => {
   const py = p.y;
 
   game.step(6);
-  assert.equal(g.ebullets[0].y, y0, '敵彈唔應該再郁');
+  assert.equal(e.y, ey, '敵機唔應該再郁');
   assert.notEqual(p.y, py, '粒子要繼續演');
 });
 
@@ -81,15 +102,22 @@ test('暫停會連過場都停', () => {
   assert.equal(g.game.finaleT, t0, '暫停時過場唔應該繼續行');
 });
 
-test('唔係 BOSS 波打低 BOSS 就唔會有過場', () => {
+test('唔使揀能力嗰隻 BOSS 一樣有過場,演完直接接返落去', () => {
   const game = loadGame();
   const { g } = game;
+  if (g.PICK_EVERY === 1) return;                      // 每波都揀嘅話冇呢種情況
+
   game.startClean();
-  game.run('game.wave = 4; enemies.length = 0; spawnEnemy("boss");');
+  game.run(`WAVE.bossEvery = ${g.PICK_EVERY + 1};`);   // 整一個「係 BOSS 波但唔使揀嘢」嘅波
+  const w = game.findWave({ boss: true, pick: false });
+  game.run(`game.wave = ${w}; enemies.length = 0; game.queue.length = 0; spawnBoss("crystal");`);
   const boss = g.enemies[0];
   boss.y = 200; boss.hp = 1;
   g.bullets.push({ x: boss.x, y: boss.y, vx: 0, vy: 0, r: 4 });
   g.updateBullets(1 / 60);
-  assert.equal(g.game.state, 'playing');
-  assert.ok(!g.enemies.includes(boss), '照舊即刻消失');
+
+  assert.equal(g.game.state, 'finale', 'BOSS 幾多波一隻,同揀唔揀能力係兩件事');
+  game.step(frames(g, g.FINALE.pick) + 30);
+  assert.equal(g.game.state, 'playing', '冇卡揀就直接返遊戲');
+  assert.equal(g.pickOffers.length, 0, '唔應該彈能力畫面');
 });

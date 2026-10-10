@@ -3,38 +3,36 @@
 // 分工:狀態同規則喺 abilities.js,呢度淨係負責「顯示」同「收使用者嘅動作」。
 // 所有 DOM 操作都守住 pickEl 存唔存在,咁 Node 測試(冇真 DOM)一樣行得。
 //
-// 畫面更新係「淨係改郁咗嗰части」:開畫面先整一次完整 HTML,之後撳卡、重抽
+// 畫面更新係「淨係改郁咗嗰部分」:開畫面先整一次完整 HTML,之後撳卡、重抽
 // 都只係改對應嗰張卡同頂部嘅錢,唔會成個 innerHTML 重建 —— 重建會閃一閃,似 reload。
 
 const pickEl = document.getElementById('pick');
 
 let pickOffers = [];      // 而家出緊嘅卡(ability id)
-let pickChosen = null;    // 玩家撳咗邊張,未確認
 
 function openPicker(slideIn = false) {
   game.state = 'picking';
+  // 場上剩低嘅敵彈唔可以留到揀完先至飛埋嚟 —— 玩家一返到遊戲就食彈,
+  // 完全避唔到。用旗唔直接清,因為呢度可能係喺 update() 行緊 loop 嗰陣被叫。
+  game.clearShots = true;
   pickOffers = offerAbilities();
-  pickChosen = null;
   renderPicker();
   if (pickEl) pickEl.classList.toggle('slide', slideIn);
 }
 
 function closePicker() {
   pickOffers = [];
-  pickChosen = null;
   if (pickEl) pickEl.hidden = true;
   game.state = 'playing';
   startWave();
 }
 
+// 撳一下就即裝,冇「揀 → 確認」兩步。
+// 隻 game 要做到可以放空個腦玩(見 NOTES D1),唔想為咗一張卡要停低嚟諗同再撳多一次。
+// 代價:撳錯就冇得回頭。重抽掣係另一粒掣,所以唔會撳重抽嗰陣誤裝。
 function choosePick(id) {
-  pickChosen = pickChosen === id ? null : id;   // 撳多次可以取消
-  syncSelection();
-}
-
-function confirmPick() {
-  if (!pickChosen) return false;
-  takeAbility(pickChosen);
+  if (!pickOffers.includes(id)) return false;
+  takeAbility(id);
   closePicker();
   return true;
 }
@@ -42,12 +40,9 @@ function confirmPick() {
 function rerollAt(i) {
   if (!canAffordReroll()) return false;
   payReroll();
-  const replacement = rerollOne(pickOffers, i);
-  if (pickChosen === pickOffers[i]) pickChosen = null;
-  pickOffers[i] = replacement;
+  pickOffers[i] = rerollOne(pickOffers, i);
   replaceCard(i);
   syncBank();
-  syncSelection();
   return true;
 }
 
@@ -109,13 +104,10 @@ function renderPicker() {
     <div class="pick-cards">
       ${pickOffers.map((id, i) => `<div class="pick-card" data-card="${i}">${cardInner(id, i)}</div>`).join('')}
     </div>
-
-    <button class="pick-confirm" data-confirm disabled>${t('pickConfirm')}</button>
   `;
   pickEl.hidden = false;
   pickEl.scrollTop = 0;
   syncBank();
-  syncSelection();
 }
 
 // 只換一張卡,唔郁其他嘢
@@ -136,23 +128,11 @@ function syncBank() {
   pickEl.querySelectorAll('[data-reroll]').forEach(b => { b.disabled = poor; });
 }
 
-// 更新「揀咗邊張」同確認掣
-function syncSelection() {
-  if (!pickEl) return;
-  pickEl.querySelectorAll('[data-card]').forEach(card => {
-    const id = card.querySelector('[data-pick]').dataset.pick;
-    card.classList.toggle('on', id === pickChosen);
-  });
-  pickEl.querySelector('[data-confirm]').disabled = !pickChosen;
-}
-
 if (pickEl) {
   pickEl.addEventListener('click', e => {
     const card = e.target.closest('[data-pick]');
     const reroll = e.target.closest('[data-reroll]');
-    const confirm = e.target.closest('[data-confirm]');
-    if (reroll) rerollAt(+reroll.dataset.reroll);
+    if (reroll) rerollAt(+reroll.dataset.reroll);          // 重抽掣要行先,佢喺卡入面
     else if (card) choosePick(card.dataset.pick);
-    else if (confirm) confirmPick();
   });
 }
