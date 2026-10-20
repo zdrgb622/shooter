@@ -64,6 +64,7 @@ function nextMove(b) {
   b.moveIdx = (b.moveIdx + 1) % moves.length;
   b.move = moves[b.moveIdx];
   b.cycle = 0; b.done = 0; b.moveEnd = false;
+  b.grazed = 0;         // 擦彈:每招重新計(星蛇每節每招只畀擦一次)
   const d = b.move.start ? b.move.start(b) : undefined;
   b.moveDur = d === undefined ? b.move.dur : d;
 }
@@ -98,7 +99,7 @@ const bossFocusY = b => clamp(bossOnScreenAt(b) ? b.y : b.hitY, 80, H - 80);
 
 // 第一階段招式循環(秒)。每一下都有預警:尖端先着燈 / 碎片先彈警示圈,
 // 玩家睇得出下一步,先可以走位 —— 舊嗰三招係冇預警嘅。
-const BOSS_CYCLE = 5;
+const BOSS_CYCLE = 6;
 const BOSS_VOLLEY_AT = .45;    // 第一個尖端幾時開火
 const BOSS_TIP_GAP = .25;      // 尖端之間差幾耐
 const BOSS_TIP_GLOW = .65;     // 着燈維持幾耐
@@ -199,6 +200,8 @@ const SERPENT = {
   thick: .8,          // 粗幼(設計:0.8)
   hitR: 19,           // 一節俾子彈打中嘅半徑(尾四節會跟住縮細)
   touchR: 15,         // 一節撞到戰機嘅半徑 —— 細過畫出嚟,對玩家寬鬆啲
+  grazeR: 28,         // 擦彈由呢個半徑再加 GRAZE.ring 計 —— 跟畫出嚟嘅身(連腳約 31),唔跟 touchR。
+                      // 用 touchR 嘅話擦彈範圍會縮入畫出嚟嘅身入面,玩家睇住唔撞到就已經擦唔到
   headHitR: 24, headTouchR: 19, headFront: 10,   // 個頭個圓心喺頭中心前面少少
 };
 
@@ -224,7 +227,9 @@ const SERPENT_LURK = {
   back: 1.17,         // 縮返
   rest: .5,
   swimOut: 1.4,       // 游返出畫面
-  minReach: 140, maxReach: 460,   // 頭槌最近 / 最遠撞幾遠
+  restUp: 100,        // 成條潛伏路線向上搬幾多 px:越大企得越後(0 = 設計圖個位,個頭停喺 (330, 330))
+  wallGap: 40,        // 頭槌撞到牆:個頭中心停喺離畫面邊幾遠(頭尖 44px,咁個嘴啱啱插入牆)
+  minReach: 140,      // 頭槌最少撞幾遠(玩家貼住佢都唔會得個縮頸)
 };
 const LURK_HB = ['watch', 'lock', 'pull', 'hold', 'lunge', 'stuck', 'back', 'rest']
   .reduce((sum, k) => sum + SERPENT_LURK[k], 0);   // 一下頭槌由望到收要幾耐
@@ -232,26 +237,14 @@ const LURK_HB = ['watch', 'lock', 'pull', 'hold', 'lunge', 'stuck', 'back', 'res
 // 設計圖嘅路線(畫面座標,同遊戲一樣 480×720)。直接抄設計檔,方便對返。
 const SERPENT_PATHS = {
   lurk: 'M 1700 110 L 520 110 C 410 110, 225 105, 215 195 C 205 275, 408.9 220.5, 353.4 297.5 L 330 330',
-  A: 'M -958.4 695 L -120 150 C 80 20, 380 20, 430 170 C 480 290, 470 410, 370 440 C 270 445, 130 445, 75 390 C 20 330, 40 190, 150 120 C 210 80, 240 40, 240 -80 L 240 -1072 L 240 1772',
-  // 斜角:最後一段斜插要等鎖定玩家位置先至加落去,所以呢度停喺右上角畫面外
-  B: 'M -958.4 695 L -120 150 C 80 20, 380 20, 430 170 C 480 290, 470 410, 370 440 C 270 445, 130 445, 75 390 C 20 330, 40 190, 150 120 C 210 80, 240 40, 240 -80 L 240 -1072 L 780 -1072 L 786.7 -503.7',
   C: 'M 110 -2090 L 110 -90 L 110 810 L 585 810 L 585 -90 L 370 -90 L 370 810 L -105 810 L -105 -90 L 240 -90 L 240 1892',
   // 包圍:圍住 (240, 430) 打圈,實際會搬去玩家附近
   D: 'M 65 -1090 L 65 -90 L 65 430 L 66.1 445.2 L 68.6 460.2 L 72.3 474.9 L 77.3 489.2 L 83.6 503 L 90.9 516.1 L 99.4 528.5 L 108.9 540 L 119.3 550.7 L 130.6 560.4 L 142.6 569.1 L 155.4 576.6 L 168.7 583 L 182.4 588.2 L 196.6 592.1 L 210.9 594.8 L 225.5 596.3 L 240 596.4 L 254.5 595.3 L 268.7 593 L 282.7 589.4 L 296.3 584.6 L 309.3 578.7 L 321.8 571.7 L 333.5 563.6 L 344.5 554.6 L 354.7 544.7 L 363.8 533.9 L 372 522.5 L 379.2 510.4 L 385.2 497.7 L 390.1 484.6 L 393.9 471.2 L 396.4 457.6 L 397.7 443.8 L 397.9 430 L 396.8 416.3 L 394.5 402.8 L 391.1 389.5 L 386.5 376.7 L 380.9 364.3 L 374.2 352.5 L 366.6 341.4 L 358 331 L 348.6 321.4 L 338.4 312.7 L 327.5 305 L 316.1 298.2 L 304.1 292.5 L 291.7 287.9 L 279 284.4 L 266.1 282 L 253.1 280.8 L 240 280.7 L 227 281.8 L 214.2 283.9 L 201.7 287.2 L 189.6 291.5 L 177.9 296.9 L 166.8 303.2 L 156.3 310.4 L 146.5 318.6 L 137.5 327.5 L 129.3 337.1 L 122 347.4 L 115.7 358.2 L 110.3 369.5 L 106 381.2 L 102.7 393.2 L 100.5 405.4 L 99.3 417.7 L 99.3 430 L 100.3 442.2 L 102.4 454.3 L 105.5 466 L 109.6 477.5 L 114.6 488.5 L 120.6 498.9 L 127.5 508.8 L 135.1 518 L 143.5 526.5 L 152.6 534.1 L 162.3 541 L 172.5 546.9 L 183.1 551.9 L 194.2 556 L 205.4 559 L 216.9 561.1 L 228.4 562.1 L 240 562.1 L 251.5 561.2 L 262.8 559.2 L 273.8 556.3 L 284.5 552.4 L 294.8 547.6 L 304.6 542 L 313.9 535.5 L 322.5 528.3 L 330.4 520.4 L 337.6 511.9 L 344 502.8 L 349.5 493.2 L 354.2 483.2 L 357.9 472.9 L 360.7 462.4 L 362.6 451.6 L 363.6 440.8 L 363.6 430 L 362.6 419.3 L 360.8 408.7 L 358 398.4 L 354.3 388.4 L 349.8 378.8 L 344.5 369.6 L 338.5 361 L 331.7 353 L 324.3 345.7 L 316.4 339 L 307.9 333.1 L 298.9 327.9 L 289.6 323.6 L 280 320.1 L 270.1 317.5 L 260.1 315.8 L 250.1 315 L 240 315 C 170 315, 150 175, 150 -90 L 150 -1172',
 };
 
-// 衝刺四款嘅時間軸:[秒, 個頭行到條路邊度] 一對對,中間直線插值(照設計 keyframes)。
+// 衝刺(C、D)嘅時間軸:[秒, 個頭行到條路邊度] 一對對,中間直線插值(照設計 keyframes)。
 // warns:預警幾時出幾時收(秒),同埋畫邊種。
 const SERPENT_DASH = {
-  A: {   // 直插:沿畫面邊兜大圈,逼玩家去中間,之後由頂直插中線
-    keys: [0, 1000, 5.556, 2777.5, 6.974, 3769.5, 9.56, 6613.5],
-    warns: [{ kind: 'col', x: 240, t0: 5.556, t1: 8.176 }],
-  },
-  B: {   // 斜角:兜完圈由右上角斜插,條線瞄住玩家而家個位
-    keys: [0, 1000, 5.555, 2777.5, 6.973, 3769.5, 7.399, 4877.8, 10.13, 7881],
-    warns: [{ kind: 'diag', t0: 5.555, t1: 8.278 }],
-    aimAt: 5.555, from: [786.7, -503.7], diveLen: 3003.2,
-  },
   C: {   // 三連衝:唔兜圈,左、右、中連插三次
     keys: [0, 1000, 1.0, 2000, 1.90, 2900, 2.96, 4490, 3.86, 5390, 5.008, 7110, 6.99, 9092],
     warns: [{ kind: 'col', x: 110, t0: .05, t1: 1.30 },
@@ -401,6 +394,8 @@ function serpentInit(b) {
   b.pn = 0; b.s = 0;
   b.segX = new Float64Array(SERPENT.nodes); b.segY = new Float64Array(SERPENT.nodes);
   b.segA = new Float64Array(SERPENT.nodes);
+  b.gzX = new Float64Array(SERPENT.nodes); b.gzY = new Float64Array(SERPENT.nodes);   // 擦彈:上一幀每節喺邊
+  b.gzMove = null;        // 上一幀係邊一招 —— 換咗招(條路換咗)嗰幀唔當係掃過
   b.angle = 0;
   b.aim = 0;              // 個頭望住玩家轉咗幾多(純畫面)
   b.stage = '';           // 潛伏入面而家做緊邊一步,畫圖用
@@ -412,7 +407,6 @@ function serpentInit(b) {
   b.warns = [0, 1, 2].map(() => ({ kind: '', x: 0, y: 0, a: 0, r: 0, t0: 0, t1: 0 }));
   b.nWarn = 0;
   b.keys = new Float64Array(16); b.nKeys = 0; b.keyEnd = 0;   // 今次衝刺嘅時間軸(可能延後咗)
-  b.aimAt = -1;
 }
 
 function setWarn(b, i, kind, x, y, t0, t1, a = 0, r = 0) {
@@ -429,7 +423,7 @@ function serpentLurk(times) {
   return {
     start(b) {
       b.mirror = Math.random() < .5;
-      pathFrom(b, SERPENT_CMDS.lurk, 0, 0, b.mirror);
+      pathFrom(b, SERPENT_CMDS.lurk, 0, -T.restUp, b.mirror);
       b.restS = b.pl[b.pn - 1];                 // 停喺條路嘅盡頭
       b.s = 1000;                               // 個頭喺畫面外
       b.nWarn = 0; b.weak = false; b.eyesRed = false;
@@ -480,6 +474,10 @@ function serpentLurk(times) {
               b.impactT = b.cycle;
               shake(12);
               explode(b.x, b.y, b.edge, 16, 200);
+              // 撞牆嗰點(個嘴前面)再爆一堆火花
+              const wx = clamp(b.x + Math.cos(b.angle) * T.wallGap, 4, W - 4);
+              const wy = clamp(b.y + Math.sin(b.angle) * T.wallGap, 4, H - 4);
+              explode(wx, wy, '#fff', 12, 260);
             }
           } else if (u < restAt) {
             b.stage = 'back'; b.stageT = u - backAt;
@@ -510,7 +508,17 @@ function serpentLurk(times) {
 
 const angleDiff = (a, b) => Math.atan2(Math.sin(a - b), Math.cos(a - b));
 
-// 鎖定:記低玩家而家個位,由停定嗰點駁一條直線過去做頭槌嘅路
+// 由 (x, y) 沿 (ux, uy) 行幾遠會撞到畫面邊
+function wallDist(x, y, ux, uy) {
+  let d = Infinity;
+  if (ux > 1e-6) d = Math.min(d, (W - x) / ux);
+  else if (ux < -1e-6) d = Math.min(d, -x / ux);
+  if (uy > 1e-6) d = Math.min(d, (H - y) / uy);
+  else if (uy < -1e-6) d = Math.min(d, -y / uy);
+  return d;
+}
+
+// 鎖定:記低玩家而家個位,由停定嗰點向住佢駁一條直線,一直撞到畫面邊(撞牆)
 function serpentLock(b, t0) {
   const T = SERPENT_LURK;
   b.lockX = player.x; b.lockY = player.y;
@@ -519,14 +527,14 @@ function serpentLock(b, t0) {
   const sx = PAX, sy = PAY;
   const d = Math.hypot(b.lockX - sx, b.lockY - sy) || 1;
   const ux = (b.lockX - sx) / d, uy = (b.lockY - sy) / d;
-  b.reach = clamp(d - SERPENT.headFront, T.minReach, T.maxReach);
+  b.reach = Math.max(T.minReach, wallDist(sx, sy, ux, uy) - T.wallGap);
   pathPush(b, sx + ux * (b.reach + 300), sy + uy * (b.reach + 300));
   const lungeEnd = t0 + T.lock + T.pull + T.hold + T.lunge;
   setWarn(b, 0, 'lunge', sx, sy, t0 + .1, lungeEnd - .12, Math.atan2(uy, ux), b.reach + 20);
   setWarn(b, 1, 'lock', b.lockX, b.lockY, t0, lungeEnd + .3);
 }
 
-// ---------- 盤旋衝刺(四款) ----------
+// ---------- 盤旋衝刺(C、D) ----------
 function serpentDash(variant) {
   const D = SERPENT_DASH[variant];
   return {
@@ -558,23 +566,59 @@ function serpentDash(variant) {
         const cy = D.centre ? D.centre[1] + dy : 0;
         setWarn(b, i, w.kind, cx, cy, w.t0 + lag, w.t1 + lag, 0, w.r || 0);
       });
-      b.aimAt = D.aimAt === undefined ? -1 : D.aimAt + lag;
       return Infinity;
     },
     update(b, dt) {
-      // 斜角:預警出現嗰刻先決定斜插條線 —— 瞄住玩家嗰一刻個位
-      if (b.aimAt >= 0 && bossDue(b, b.aimAt, 1)) {
-        const [fx, fy] = D.from;
-        const d = Math.hypot(player.x - fx, player.y - fy) || 1;
-        const ux = (player.x - fx) / d, uy = (player.y - fy) / d;
-        pathPush(b, fx + ux * D.diveLen, fy + uy * D.diveLen);
-        const w = b.warns[0];
-        setWarn(b, 0, 'diag', player.x, player.y, w.t0, w.t1, Math.atan2(uy, ux));
-      }
       const end = b.keyEnd;
       b.s = b.cycle <= end ? keyS(b.keys, b.nKeys, b.cycle) : b.keys[b.nKeys - 1] + (b.cycle - end) * 900;
       serpentPlace(b);
       if (b.cycle >= end && serpentHidden(b)) b.moveEnd = true;
+    },
+  };
+}
+
+// ---------- 衝向玩家 ----------
+// 喺畫面外(頂、左或者右)出現,預警帶瞄住玩家當刻個位,等 warn 秒之後成條直線衝過畫面。
+const SERPENT_CHARGE = {
+  warn: 1.1,          // 預警出咗幾耐先衝(秒)—— 玩家有幾多時間閃
+  speed: 1000,        // 衝幾快(px/秒)
+  margin: 120,        // 起步時個頭喺畫面外幾遠
+};
+
+function serpentCharge() {
+  const C = SERPENT_CHARGE;
+  return {
+    start(b) {
+      const side = Math.floor(Math.random() * 3);     // 0 頂、1 左、2 右
+      const x0 = side === 0 ? rand(60, W - 60) : side === 1 ? -C.margin : W + C.margin;
+      const y0 = side === 0 ? -C.margin : rand(60, H * .45);
+      const d = Math.hypot(player.x - x0, player.y - y0) || 1;
+      const ux = (player.x - x0) / d, uy = (player.y - y0) / d;
+      const back = SERPENT_LEN + 200;                 // 條身喺個頭後面,一樣喺畫面外
+      pathReset(b);
+      pathPush(b, x0 - ux * back, y0 - uy * back);
+      pathPush(b, x0 + ux * 4000, y0 + uy * 4000);
+      b.s = back;
+      serpentPlace(b);
+      b.stage = 'dash'; b.weak = false; b.eyesRed = true; b.aim = 0;
+      // 預警:斜帶 + 「!」擺喺條線入畫面嗰點再入 40px,而且唔好高過 y 126(唔好遮住 HUD 血條)
+      let enter = 0;
+      if (x0 < 0) enter = Math.max(enter, -x0 / ux);
+      if (x0 > W) enter = Math.max(enter, (W - x0) / ux);
+      if (y0 < 0) enter = Math.max(enter, -y0 / uy);
+      enter += 40;
+      if (uy > 0 && y0 + uy * enter < 126) enter = (126 - y0) / uy;
+      const ex = x0 + ux * enter, ey = y0 + uy * enter;
+      b.nWarn = 0;
+      setWarn(b, 0, 'charge', ex, ey, 0, C.warn + .4, Math.atan2(uy, ux));
+      return Infinity;
+    },
+    update(b) {
+      const t = b.cycle - C.warn;
+      // 衝過咗、上一幀已經成條出晒畫面 → 收招
+      if (b.s > SERPENT_LEN + 200 + 600 && serpentHidden(b)) { b.moveEnd = true; return; }
+      b.s = SERPENT_LEN + 200 + Math.max(0, t) * C.speed;
+      serpentPlace(b);
     },
   };
 }
@@ -606,13 +650,94 @@ function serpentTouches(b, p) {
   return false;
 }
 
-// 爆嗰下:畫面入面每一節都爆一下,唔好得個頭爆、條身靜雞雞冇咗
-function serpentBurst(b) {
-  for (let k = 0; k < SERPENT.nodes; k += 2) {
+// ---------- 擦彈 ----------
+// 只有攻擊緊先計:頭槌撞出去(lunge)同各款衝刺(dash)。觀望、卡住、縮返、游走都唔計 ——
+// 嗰啲時候條身又慢又擺明喺度,貼住佢就可以安全咁刷(用家試玩:「收頭嗰陣可以刷」= 問題)
+const SERPENT_GRAZE_STAGES = { lunge: true, dash: true };
+const SERPENT_JUMP = 300;     // 一幀郁多過呢個數 = 換咗路(瞬移),唔當係掃過
+
+// 點 (px, py) 去線段 (ax, ay)–(bx, by) 最近距離嘅平方
+function segDist2(px, py, ax, ay, bx, by) {
+  const dx = bx - ax, dy = by - ay, len2 = dx * dx + dy * dy;
+  const u = len2 ? clamp(((px - ax) * dx + (py - ay) * dy) / len2, 0, 1) : 0;
+  const x = ax + dx * u - px, y = ay + dy * u - py;
+  return x * x + y * y;
+}
+
+// 每節每招只計一次(b.grazed 係 bitmask)。回傳今幀新擦到幾多節。
+// 用「上一幀位置 → 今幀位置」成段去計(掃過),唔係淨係睇今幀個點:
+// 頭槌撞出去最快每幀郁 60–80px,淨係睇點嘅話一節會直接跳過個擦彈範圍
+function serpentGraze(b, p, ring) {
+  const fresh = b.gzMove !== b.move;
+  b.gzMove = b.move;
+  const counts = SERPENT_GRAZE_STAGES[b.stage] && !fresh;
+  const hx = b.x + Math.cos(b.angle) * SERPENT.headFront, hy = b.y + Math.sin(b.angle) * SERPENT.headFront;
+  let n = 0;
+  for (let k = 0; k < SERPENT.nodes; k++) {
+    const x = k ? b.segX[k] : hx, y = k ? b.segY[k] : hy;
+    const ox = b.gzX[k], oy = b.gzY[k];
+    b.gzX[k] = x; b.gzY[k] = y;
+    const bit = 1 << k;
+    if (!counts || (b.grazed & bit)) continue;
+    const r = SERPENT.grazeR * SERPENT_SCALE[k] + p.r + ring;
+    const jump = (x - ox) ** 2 + (y - oy) ** 2 > SERPENT_JUMP * SERPENT_JUMP;
+    const d2 = jump ? (p.x - x) ** 2 + (p.y - y) ** 2 : segDist2(p.x, p.y, ox, oy, x, y);
+    if (d2 < r * r) { b.grazed |= bit; n++; }
+  }
+  return n;
+}
+
+// ---------- 擊破演出(死亡動畫) ----------
+// 照設計檔「虛空星蛇・擊破」:最後一擊 → 痛到亂扭、裂紋越閃越勁 → 由條尾一節節連環爆上個頭
+// → 個頭掙扎幾下大爆炸 → 爆出金幣晶石吸去玩家度 → 「擊破」。
+// 全部係由最後一擊計起嘅秒數(原速),實際時間要除 SERPENT_DEATH_SPEED。畫法喺 js/sprites.js。
+const SERPENT_DEATH = {
+  barDrain: .5,       // HUD 嘅 BOSS 血條瀉到 0
+  flash: .25,         // 最後一擊白閃幾耐
+  chain: 1.2,         // 條尾第一節開始脹
+  chainGap: .09,      // 一節隔一節(成條爆完大約 2 秒,唔理有幾多節)
+  swell: .1,          // 一節由開始脹到爆
+  gone: .16,          // 一節由開始脹到完全冇咗
+  pop: .5,            // 每節爆嗰下嘅光圈、碎片維持幾耐
+  headSwell: 3.65,    // 個頭開始脹
+  burst: 3.8,         // 大爆炸:BOSS 剷走、掉寶(同通用過場一樣叫 burst)
+  burstLife: .9,      // 大爆炸光圈、光芒幾耐
+  lootOut: 3.85,      // 金幣晶石爆出嚟
+  lootSpread: 4.4,    // 散開到位
+  lootFly: 4.85,      // 第一粒開始飛去玩家度
+  lootGap: .04,       // 一粒隔一粒
+  lootFlyDur: .38,    // 每粒飛幾耐
+  bannerIn: 4.4, bannerFull: 4.6, bannerHold: 6.4, bannerOut: 6.6,   // 「擊破」大字
+  hudFade: .4,        // 大爆炸之後 HUD 淡到 .25 用幾耐
+  pick: 6.2,          // 能力畫面開始滑上嚟
+};
+const SERPENT_DEATH_SPEED = 1;   // 整體快慢。1 = 照設計(大約 6 秒);1.5 = 快一半
+
+// 第 k 節(1 = 貼住個頭,nodes − 1 = 條尾)幾時開始脹。由條尾爆起,一路爆上個頭
+function serpentDeathStart(k) {
+  const D = SERPENT_DEATH, n = SERPENT.nodes;
+  const slot = Math.round((n - 1 - k) * 22 / Math.max(1, n - 2));   // 0 = 條尾 … 22 = 貼住個頭
+  return D.chain + D.chainGap * slot;
+}
+
+// 過場每幀:每節爆嗰下噴粒子、震一震(畫面部分喺 drawSerpent)
+function serpentFinaleTick(b, ft) {
+  if (!b.deathDone) b.deathDone = 0;
+  for (let k = 1; k < SERPENT.nodes; k++) {
+    if (ft < serpentDeathStart(k) + SERPENT_DEATH.swell || (b.deathDone & (1 << k))) continue;
+    b.deathDone |= 1 << k;
     const x = b.segX[k], y = b.segY[k];
-    if (x > -20 && x < W + 20 && y > -20 && y < H + 20) explode(x, y, b.edge, 6, 200);
+    if (x > -40 && x < W + 40 && y > -40 && y < H + 40) { explode(x, y, b.edge, 8, 200); shake(5); }
   }
 }
+
+// 金幣晶石:[款, 散開去邊(相對爆炸點), 轉一圈幾耐]。照設計檔 16 粒
+const SERPENT_LOOT = [
+  ['gem', -48, -20, .6], ['coin', -69, 44, .7], ['coin', -63, 37, .8], ['star', -19, -49, .9],
+  ['coin', -42, -86, .6], ['gem', -93, 9, .7], ['coin', 31, -38, .8], ['coin', -76, 62, .9],
+  ['coin', -56, 13, .6], ['coin', 62, 12, .7], ['gem', 51, -39, .8], ['coin', -41, 25, .9],
+  ['coin', 65, -38, .6], ['coin', 35, -60, .7], ['coin', 99, -5, .8], ['gem', 33, -48, .9],
+];
 
 
 // =====================================================================
@@ -644,10 +769,13 @@ const BOSSES = {
     r: SERPENT.headHitR, score: 3000, color: '#F2C94C',
     edge: '#F2C94C', core: '#EC6FA7',
     init: serpentInit,
-    hit: serpentHit, touches: serpentTouches, burst: serpentBurst,
+    hit: serpentHit, touches: serpentTouches,
+    graze: serpentGraze, visible: b => !serpentHidden(b),
+    finale: SERPENT_DEATH, finaleSpeed: SERPENT_DEATH_SPEED, finaleTick: serpentFinaleTick,
+    drawFinale: drawSerpentFinale, drawFinaleHud: drawSerpentFinaleHud,
     draw: drawSerpent,
     phases: [
-      { over: .5, moves: [serpentLurk(1), serpentDash('A'), serpentLurk(1), serpentDash('B')] },
+      { over: .5, moves: [serpentLurk(1), serpentCharge(), serpentLurk(1), serpentCharge()] },
       // 第二階段轉色,招式更密
       { over: 0, edge: '#C77DFF', core: '#FF4D6D',
         moves: [serpentLurk(2), serpentDash('C'), serpentLurk(2), serpentDash('D')] },

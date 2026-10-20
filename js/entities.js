@@ -94,6 +94,7 @@ function spawnEnemy(type, at) {
 // ---------- 玩家 ----------
 function updatePlayer(dt) {
   const p = player;
+  if (p.dash) { updateComet(dt); return; }     // 彗星爆衝緊:唔聽操作、唔開火
   p.inv = Math.max(0, p.inv - dt);
   p.cool -= dt;
 
@@ -103,7 +104,11 @@ function updatePlayer(dt) {
   p.x = clamp(p.x, p.r, W - p.r);
   p.y = clamp(p.y, p.r + 40, H - p.r);
 
-  if (wantsFire() && p.cool <= 0) fire();
+  // 擦彈儲滿之後「放手」(手機)/「停火」(電腦、手掣)= 由開火變唔開火嗰一下就放
+  const firing = wantsFire();
+  if (!firing && p.fireHeld && p.graze >= GRAZE.full) releaseGraze();
+  p.fireHeld = firing;
+  if (firing && p.cool <= 0) fire();
 }
 
 function fire() {
@@ -114,7 +119,9 @@ function fire() {
   player.cool = Math.max(.05, (.16 - player.level * .012) * player.fireRateMult);
 }
 
-function hitPlayer() {
+// 中彈 / 撞機。dmg 預設係一粒敵彈嘅傷害;撞機嗰邊傳 HP.touch。
+// 唔會跌火力、唔會清擦彈、唔會將架機搬返去起點 —— 扣血 + 無敵時間就係全部懲罰。
+function hitPlayer(dmg = HP.bullet) {
   const p = player;
   if (p.inv > 0) return;
   game.combo = 0; game.comboT = 0;
@@ -123,19 +130,164 @@ function hitPlayer() {
     explode(p.x, p.y, '#6cc8ff', 26, 220);
     return;
   }
-  p.lives--;
-  p.level = Math.max(1, p.level - 1);
-  explode(p.x, p.y, '#ffffff', 55, 380);
-  shake(22);
-  if (p.lives <= 0) {
+  p.hp = Math.max(0, p.hp - dmg);
+  explode(p.x, p.y, '#ffffff', 40, 380);
+  shake(18);
+  // 兩條分支都一定要設 inv:同一幀通常仲有好多粒敵彈撞到,
+  // 冇 inv 就會一粒扣一次、爆炸疊幾次(B4)
+  if (p.hp <= 0) {
     game.state = 'over';
-    // 同一幀通常仲有好多粒敵彈撞到。冇呢行就會一粒扣一次命,lives 變負數、爆炸疊幾次。
-    // 另一條分支本來就有設 inv,得呢條冇 —— 所以淨係死嗰下會出事。
     p.inv = 999;
     if (game.crystals > highScore) { highScore = game.crystals; store.set('stardrift_high', highScore); }
   } else {
-    p.inv = 2.4; p.x = W / 2; p.y = H - 110;
-    game.clearShots = true;
+    p.inv = HP.inv;
+  }
+}
+
+// ---------- 擦彈 ----------
+// 敵彈 / 敵機 / 星蛇條身喺架機身邊擦過(差少少冇撞到)就儲氣。
+// 儲滿之後放手(手機)或者停火(電腦)就放炸彈:清晒敵彈,畫面入面每隻敵機扣血。
+// 數值點調見 TUNING.md「擦彈」。
+const GRAZE = {
+  ring: 16,          // 擦彈範圍:撞到嘅距離再闊幾多 px。大啲 = 易擦,細啲 = 要貼得更近
+  full: 12,          // 儲滿要幾多分
+  bullet: 1,         // 擦一粒敵彈幾多分
+  ship: 2,           // 擦一隻敵機幾多分(機身大、會郁,危險啲)
+  serpent: 1,        // 擦星蛇一節幾多分(每節每招只計一次)
+  bombDamage: 3,     // 炸彈對畫面入面每隻敵機(連 BOSS)扣幾多血
+  bombInv: .6,       // 放完炸彈無敵幾耐(秒)
+  release: 'comet',  // 放手出咩招:'comet' 彗星爆衝(照設計檔)/ 'bomb' 清晒敵彈嘅炸彈(第一版)
+};
+
+// 加分 + 火花。無敵期間唔計 —— 否則中一槍之後可以喺彈幕入面任刷
+function addGraze(n, x, y) {
+  const p = player;
+  if (p.inv > 0 || p.graze >= GRAZE.full) return;
+  p.graze = Math.min(GRAZE.full, p.graze + n);
+  p.grazeFlash = 1;
+  if (p.graze >= GRAZE.full) p.fullT = 0;        // 啱啱儲滿:白熱「爆」一下
+  fx.push({ kind: 'spark', x, y, t: 0 });
+}
+
+// 每隻敵機只計一次。BOSS 由 BOSSES 表自己答(星蛇逐節計),冇寫就唔計 ——
+// 水晶核喺頂慢慢郁,貼住佢企定就可以一路刷
+function grazeEnemy(e) {
+  const p = player;
+  if (e.type === 'boss') {
+    const def = BOSSES[e.kind];
+    const n = def.graze ? def.graze(e, p, GRAZE.ring) : 0;
+    if (n) addGraze(n * GRAZE.serpent, p.x, p.y);
+    return;
+  }
+  if (!e.grazed && dist2(e, p) < (e.r + p.r + GRAZE.ring) ** 2) {
+    e.grazed = true;
+    addGraze(GRAZE.ship, (e.x + p.x) / 2, (e.y + p.y) / 2);
+  }
+}
+
+// BOSS 喺唔喺畫面:BOSSES 表可以自己答(星蛇個頭出咗畫面,條身可能仲喺度)
+function bossVisible(b) {
+  const def = BOSSES[b.kind];
+  return def.visible ? def.visible(b) : bossOnScreenAt(b);
+}
+
+function releaseGraze() {
+  if (GRAZE.release === 'comet') { startComet(); return; }
+  const p = player;
+  p.graze = 0;
+  p.inv = Math.max(p.inv, GRAZE.bombInv);
+  for (const b of ebullets) explode(b.x, b.y, b.color || '#ff8fb0', 2);
+  game.clearShots = true;       // 唔好喺度直接清:跟 B1 規矩,喺 update() 開頭先清
+  game.bombT = 0; game.bombX = p.x; game.bombY = p.y;
+  shake(14);
+  for (let j = enemies.length - 1; j >= 0; j--) {
+    const e = enemies[j];
+    if (e.dying) continue;
+    if (e.type === 'boss' ? !bossVisible(e) : e.y < -e.r) continue;   // 未入畫面嘅唔計
+    e.hp -= GRAZE.bombDamage; e.flash = 1; e.lastDmg = GRAZE.bombDamage;
+    e.hitX = p.x; e.hitY = p.y;
+    if (e.hp <= 0) killEnemy(e, j);
+  }
+}
+
+// ---------- 彗星爆衝 ----------
+// 照設計檔「彗星爆衝+紅轉白」:儲滿放手 → 蹲一蹲、拉長 → 變彗星直衝上畫面頂,
+// 撞中嘅敵機原地爆火球 → 由畫面底飛返原位 → 閃一陣(仲係無敵)。成段唔聽操作、唔開火。
+// 時間(秒)由放手計起;畫法喺 js/render.js 嘅 drawPlayer / drawFx。
+const FX_LIFE = { spark: .25, blast: 1.15 };   // 特效幾耐消失(秒)
+
+const COMET = {
+  crouch: .08,       // 蹲低蓄勢
+  stretch: .07,      // 拉長
+  rise: .45,         // 衝上畫面頂(越衝越快)
+  away: .3,          // 衝咗出畫面頂之後等幾耐先由下面返嚟(設計檔係 1.05 秒,太耐冇得玩)
+  back: .49,         // 由畫面底飛返原位
+  blink: .4,         // 返到位之後閃,仲係無敵
+  reach: 60,         // 中線左右幾闊範圍內嘅敵機會被撞(px)
+  damage: 40,        // 撞中普通敵機扣幾多血(即係撞中就死)
+  bossDamage: 24,    // 撞中 BOSS 扣幾多(每次衝刺每隻 BOSS 只計一次)
+};
+// 衝上去嘅路程比例,每 .05 秒一格(抄設計檔 keyframes:47 → 101 → 161 … → 660 px)
+const COMET_RISE = [0, .0717, .153, .244, .346, .457, .578, .709, .849, 1];
+
+const cometRiseAt = u => {                 // u: 0 → 1
+  const f = clamp(u, 0, 1) * (COMET_RISE.length - 1), i = Math.min(COMET_RISE.length - 2, Math.floor(f));
+  return COMET_RISE[i] + (COMET_RISE[i + 1] - COMET_RISE[i]) * (f - i);
+};
+const cometRiseEnd = () => COMET.crouch + COMET.stretch + COMET.rise;
+const cometBackAt = () => cometRiseEnd() + COMET.away;
+const cometEnd = () => cometBackAt() + COMET.back;
+
+function startComet() {
+  const p = player;
+  p.graze = 0;
+  // 由而家個位衝到畫面頂之外(個頭過咗 y −190)
+  p.dash = { t: 0, x0: p.x, y0: p.y, dist: p.y + 190, hit: [] };
+  p.inv = Math.max(p.inv, cometEnd() + COMET.blink);
+  shake(6);
+}
+
+// 第 t 秒架機離原位幾遠(y,負數 = 向上)
+function cometOffset(d, t) {
+  const C = COMET;
+  if (t < C.crouch) return 10 * t / C.crouch;
+  if (t < C.crouch + C.stretch) return 10 * (1 - (t - C.crouch) / C.stretch);
+  if (t < cometRiseEnd()) return -d.dist * cometRiseAt((t - C.crouch - C.stretch) / C.rise);
+  if (t < cometBackAt()) return -d.dist;
+  const u = clamp((t - cometBackAt()) / C.back, 0, 1);
+  const from = Math.max(240, H + 50 - d.y0);           // 由畫面底下面飛返上嚟
+  return from * (1 - u) * (1 - u);
+}
+
+function updateComet(dt) {
+  const p = player, d = p.dash;
+  const prevY = p.y;
+  d.t += dt;
+  p.x = d.x0;
+  p.y = d.y0 + cometOffset(d, d.t);
+  if (d.t >= cometEnd()) { p.y = d.y0; p.dash = null; p.cool = 0; return; }
+  if (d.t < COMET.crouch + COMET.stretch || d.t >= cometRiseEnd()) return;
+
+  // 衝上去嗰段:由上一幀到今幀經過嘅範圍,左右 reach 之內嘅敵機都撞(每隻每次只撞一下)
+  const top = p.y - 30, bottom = prevY + 30;
+  for (let j = enemies.length - 1; j >= 0; j--) {
+    const e = enemies[j];
+    if (e.dying || d.hit.includes(e)) continue;
+    let hit = false;
+    if (e.type === 'boss') {
+      for (let y = bottom; y >= top && !hit; y -= 20) hit = enemyHit(e, { x: d.x0, y, r: COMET.reach }) > 0;
+    } else {
+      hit = Math.abs(e.x - d.x0) < COMET.reach + e.r && e.y > top - e.r && e.y < bottom + e.r;
+    }
+    if (!hit) continue;
+    d.hit.push(e);
+    const dmg = e.type === 'boss' ? COMET.bossDamage : COMET.damage;
+    const gain = Math.round(e.score * comboMult());
+    const hx = e.type === 'boss' ? d.x0 : e.x, hy = e.type === 'boss' ? p.y : e.y;
+    e.hp -= dmg; e.flash = 1; e.lastDmg = dmg; e.hitX = hx; e.hitY = hy;
+    fx.push({ kind: 'blast', x: hx, y: hy, t: 0, rot: d.hit.length * 20, score: e.hp <= 0 && e.type !== 'boss' ? gain : 0 });
+    shake(8);
+    if (e.hp <= 0) killEnemy(e, j);
   }
 }
 
@@ -177,9 +329,11 @@ function updateEnemies(dt) {
     if (e.type !== 'boss' && e.y > H + 70) { enemies.splice(i, 1); continue; }
 
     if (player.inv <= 0 && enemyTouches(e, player)) {
-      hitPlayer();
+      hitPlayer(HP.touch);
       if (e.type !== 'boss') killEnemy(e, i, false);
+      continue;
     }
+    grazeEnemy(e);
   }
 }
 
@@ -211,6 +365,11 @@ const FINALE = {
   pick: 2.91,      // 能力畫面開始滑上嚟(滑完 .63 秒到位)
 };
 
+// 每隻 BOSS 可以有自己一套過場(BOSSES[kind].finale + finaleSpeed + drawFinale),冇寫就用上面通用嗰套。
+// 自己嗰套最少要有 barDrain、burst、pick 三個時間,意思同上面一樣。
+const finaleOf = kind => (BOSSES[kind] && BOSSES[kind].finale) || FINALE;
+const finaleSpeedOf = kind => (BOSSES[kind] && BOSSES[kind].finaleSpeed) || FINALE_SPEED;
+
 // BOSS 中咗最後一擊:唔即刻剷走,留低佢演完過場先
 function startFinale(boss) {
   boss.dying = true;
@@ -221,6 +380,7 @@ function startFinale(boss) {
   game.finaleY = bossFocusY(boss);
   game.finaleKind = boss.kind;             // BOSS 爆咗之後 HUD 仲要知道寫邊個名
   game.finaleColor = boss.core || BOSS_TONE.core;
+  game.finaleEdge = boss.edge || game.finaleColor;
   game.finaleBar = clamp((boss.hp + (boss.lastDmg || 1)) / boss.maxhp, 0, 1);   // 最後一擊之前條血條去到邊
   game.finaleReward = boss.score;
   game.clearShots = true;      // BOSS 死咗,佢臨死前射嗰啲彈唔應該喺度等玩家返嚟食
@@ -228,12 +388,17 @@ function startFinale(boss) {
 }
 
 function updateFinale(dt) {
-  game.finaleT += dt * FINALE_SPEED;
+  const F = finaleOf(game.finaleKind);
+  game.finaleT += dt * finaleSpeedOf(game.finaleKind);
   const t = game.finaleT;
   const boss = enemies.find(e => e.dying);
-  if (boss) boss.t += dt;        // 碎片繼續轉,BOSS 唔會突然定格
+  if (boss) {
+    boss.t += dt;                // 碎片繼續轉,BOSS 唔會突然定格
+    const def = BOSSES[boss.kind];
+    if (def.finaleTick) def.finaleTick(boss, t);   // BOSS 自己嘅演出(例如星蛇一節節爆)
+  }
 
-  if (t >= FINALE.burst && !(game.finaleDone & 1)) {
+  if (t >= F.burst && !(game.finaleDone & 1)) {
     game.finaleDone |= 1;
     if (boss) {
       const x = game.finaleX, y = game.finaleY, def = BOSSES[boss.kind];
@@ -247,7 +412,7 @@ function updateFinale(dt) {
     shake(26);
   }
 
-  if (t >= FINALE.pick && !(game.finaleDone & 2)) {
+  if (t >= F.pick && !(game.finaleDone & 2)) {
     game.finaleDone |= 2;
     if (pickDue()) {
       openPicker(true);          // true = 由下面滑上嚟
@@ -315,9 +480,15 @@ function updateBullets(dt) {
       b.x += b.vx * dt; b.y += b.vy * dt; // moving ebullets
     }
     if (b.y > H + 20 || b.y < -40 || b.x < -30 || b.x > W + 30) { ebullets.splice(i, 1); continue; }  // when ebullets outside boundry
-    if (player.inv <= 0 && dist2(b, player) < (b.r + player.r) ** 2) {
+    const d2 = dist2(b, player);
+    if (player.inv <= 0 && d2 < (b.r + player.r) ** 2) {
       ebullets.splice(i, 1);
       hitPlayer();
+      continue;
+    }
+    if (!b.grazed && d2 < (b.r + player.r + GRAZE.ring) ** 2) {
+      b.grazed = true;
+      addGraze(GRAZE.bullet, (b.x + player.x) / 2, (b.y + player.y) / 2);
     }
   }
 }
@@ -338,7 +509,7 @@ function updatePowerups(dt) {
       powerups.splice(i, 1);
       if (u.kind === 'power') { player.level = Math.min(5, player.level + 1); game.crystals += 50; }
       if (u.kind === 'shield') player.shield = Math.min(3, player.shield + 1);
-      if (u.kind === 'life') player.lives = Math.min(6, player.lives + 1);
+      if (u.kind === 'life') player.hp = Math.min(player.maxHp, player.hp + HP.heal);
       explode(u.x, u.y, PU[u.kind].c, 16, 150);
     }
   }
@@ -346,6 +517,8 @@ function updatePowerups(dt) {
 
 // ---------- 每幀更新 ----------
 function update(dt) {
+  // 唔係打緊(暫停、揀能力、過場)嗰陣放手唔算 —— 否則返嚟一開波就會無端端放炸彈
+  if (game.paused || game.state !== 'playing') player.fireHeld = false;
   if (game.paused) return;   // 暫停:連背景星星同粒子都唔郁,成個畫面定格
 
   // 清場:一定要喺所有 loop 之外做(見 DEVLOG 第一篇),亦要喺下面啲 state 閘之前 ——
@@ -359,6 +532,13 @@ function update(dt) {
     if (p.life <= 0) particles.splice(i, 1);
   }
   game.shake = Math.max(0, game.shake - dt * 45);
+  game.bombT += dt;
+  player.grazeFlash = Math.max(0, player.grazeFlash - dt * 5);
+  player.fullT += dt;
+  for (let i = fx.length - 1; i >= 0; i--) { fx[i].t += dt; if (fx[i].t > FX_LIFE[fx[i].kind]) fx.splice(i, 1); }
+  // 血條白色嗰截:扣血之後停一停先慢慢追落去,補血就即刻跟上
+  if (player.hpShown < player.hp) player.hpShown = player.hp;
+  else if (game.state === 'playing') player.hpShown = Math.max(player.hp, player.hpShown - dt * 60);
   if (game.bannerT > 0) game.bannerT -= dt;
   if (game.state === 'playing' && game.combo > 0) {
     game.comboT -= dt;

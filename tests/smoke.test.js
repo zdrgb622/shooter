@@ -58,7 +58,8 @@ test('每一隻 BOSS 都打得死', () => {
     assert.doesNotThrow(() => g.updateBullets(1 / 60));
     assert.equal(g.game.state, 'finale', `打低 ${kind} 會入過場`);
 
-    game.step(Math.ceil(60 * g.FINALE.burst / g.FINALE_SPEED) + 6);
+    // 每隻 BOSS 可以有自己一套過場時間(星蛇嘅擊破演出長好多),讀返遊戲嘅值
+    game.step(Math.ceil(60 * g.finaleOf(kind).burst / g.finaleSpeedOf(kind)) + 6);
     assert.ok(!g.enemies.includes(boss), `${kind} 應該死咗`);
     assert.equal(g.powerups.length, 3, `${kind} 死咗應該掉三件寶`);
   }
@@ -68,10 +69,10 @@ test('Game over 之後可以重新開始', () => {
   const game = loadGame();
   const { g } = game;
   game.startClean();
-  g.player.lives = 1;
+  g.player.hp = 1;
   g.hitPlayer();
   assert.equal(g.game.state, 'over');
   game.key('KeyR');
   assert.equal(g.game.state, 'playing');
-  assert.equal(g.player.lives, 3);
+  assert.equal(g.player.hp, g.HP.max);
 });

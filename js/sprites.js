@@ -257,6 +257,7 @@ const SERPENT_ART = {
   jawR: [[40.8, 11.9], [68, 22.1], [59.5, 5.1]],
   eyeL: [[17, -18.7], [30.6, -11.9], [20.4, -8.5]],
   eyeR: [[17, 18.7], [30.6, 11.9], [20.4, 8.5]],
+  crack: [[[-14, -8], [-4, -2], [-8, 6], [4, 12]], [[6, -14], [2, -4], [12, 2]]],   // 擊破演出嘅紅色裂紋
 };
 const SERPENT_TONE = { body: '#132A3A', dark: '#0B1026', red: '#FF4D6D', redEdge: '#FFD6E0' };
 
@@ -323,7 +324,7 @@ function drawSerpentWarnsUnder(e) {
       ctx.fillStyle = e.core;
       ctx.globalAlpha = a * .16; ctx.fillRect(w.x - 28, 0, 56, H);
       ctx.globalAlpha = a; ctx.fillRect(w.x - 28, 0, 2, H); ctx.fillRect(w.x + 26, 0, 2, H);
-    } else if (w.kind === 'diag') {               // 斜插嘅路線
+    } else if (w.kind === 'charge') {             // 衝向玩家嘅路線
       ctx.save(); ctx.translate(w.x, w.y); ctx.rotate(w.a);
       ctx.fillStyle = e.core;
       ctx.globalAlpha = a * .16; ctx.fillRect(-900, -28, 1800, 56);
@@ -367,25 +368,235 @@ function drawSerpentWarnsOver(e) {
     if (a <= 0) continue;
     ctx.globalAlpha = Math.min(1, a + .1);
     if (w.kind === 'col' || w.kind === 'ring') drawBadge(w.x, 126, e.core);
-    else if (w.kind === 'diag') {
-      // 「!」擺喺條線入畫面附近(y = 150)
-      const k = Math.abs(Math.sin(w.a)) > .1 ? (150 - w.y) / Math.sin(w.a) : 0;
-      drawBadge(clamp(w.x + Math.cos(w.a) * k, 30, W - 30), 150, e.core);
+    else if (w.kind === 'charge') drawBadge(clamp(w.x, 30, W - 30), clamp(w.y, 30, H - 30), e.core);   // 條線入畫面嗰點
+  }
+  ctx.globalAlpha = 1;
+}
+
+// ---------- 擊破演出:畫法(時間表喺 js/bosses.js 嘅 SERPENT_DEATH) ----------
+
+function drawCracks() {
+  ctx.strokeStyle = SERPENT_TONE.red; ctx.lineWidth = 1.6; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+  ctx.beginPath();
+  for (const line of SERPENT_ART.crack) {
+    ctx.moveTo(line[0][0], line[0][1]);
+    for (let i = 1; i < line.length; i++) ctx.lineTo(line[i][0], line[i][1]);
+  }
+  ctx.stroke(); ctx.lineCap = 'butt';
+}
+
+// 條身發熱:最後一擊閃白,之後一閃一閃,越閃越勁
+function serpentHeat(ft) {
+  if (ft < .05) return .9 * ft / .05;
+  if (ft < .25) return .9 - .8 * (ft - .05) / .2;
+  const u = clamp((ft - .25) / 3.4, 0, 1), lo = .03 + .18 * u, hi = .12 + .55 * u;
+  return lo + (hi - lo) * (.5 - .5 * Math.cos((ft - .25) / .14 * Math.PI));
+}
+
+function serpentHeadHot(ft) {
+  if (ft < .15) return 1 - ft / .15;
+  if (ft >= SERPENT_DEATH.burst - .07) return 1;
+  const u = clamp((ft - .15) / 3.55, 0, 1), lo = .07 + .24 * u, hi = .17 + .73 * u;
+  return lo + (hi - lo) * (.5 + .5 * Math.cos((ft - .15) / .12 * Math.PI));
+}
+
+// 一節爆嗰下:光圈 + 閃光 + 四塊碎片
+function drawSerpentPops(e, ft) {
+  const D = SERPENT_DEATH;
+  for (let k = 1; k < SERPENT.nodes; k++) {
+    const t0 = serpentDeathStart(k) + D.swell, u = (ft - t0) / D.pop;
+    if (u < 0 || u >= 1) continue;
+    const x = e.segX[k], y = e.segY[k];
+    if (x < -80 || x > W + 80 || y < -80 || y > H + 80) continue;
+    ctx.globalAlpha = 1 - u;
+    ctx.strokeStyle = e.edge; ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.arc(x, y, 34 * (.5 + 1.4 * u), 0, Math.PI * 2); ctx.stroke();
+    const uf = Math.min(1, (ft - t0) / .26);
+    if (uf < 1) {
+      const r = 26 * (1.25 + .35 * uf), g = ctx.createRadialGradient(x, y, 0, x, y, r);
+      g.addColorStop(0, '#FFFFFF'); g.addColorStop(.4, e.core); g.addColorStop(.7, 'rgba(236,111,167,0)');
+      ctx.globalAlpha = 1 - uf; ctx.fillStyle = g;
+      ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
+    }
+    ctx.globalAlpha = 1 - u;
+    const a0 = (k * 47) % 90;
+    for (let j = 0; j < 4; j++) {
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.rotate((a0 + j * 90) * Math.PI / 180);
+      ctx.translate(6 + 36 * u, 0);
+      ctx.rotate((20 + 200 * u) * Math.PI / 180);
+      ctx.beginPath(); ctx.moveTo(-5, -4); ctx.lineTo(6, 0); ctx.lineTo(-5, 4); ctx.closePath();
+      ctx.fillStyle = j === 2 ? SERPENT_TONE.body : j === 3 ? e.core : e.edge;
+      ctx.fill();
+      if (j === 2) { ctx.strokeStyle = e.edge; ctx.lineWidth = 1; ctx.stroke(); }
+      ctx.restore();
     }
   }
+  ctx.globalAlpha = 1;
+}
+
+// 金幣 / 晶石 / 星:照設計檔 SVG
+function drawLoot(kind) {
+  ctx.lineJoin = 'round';
+  if (kind === 'coin') {
+    ctx.fillStyle = '#F2C94C'; ctx.strokeStyle = '#8A6A12'; ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.arc(0, 0, 8, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+    ctx.strokeStyle = '#FFF1B8';
+    ctx.beginPath(); ctx.arc(0, 0, 4, 0, Math.PI * 2); ctx.stroke();
+  } else if (kind === 'gem') {
+    ctx.fillStyle = '#4FD1C5'; ctx.strokeStyle = '#E8FFFB'; ctx.lineWidth = 1.4;
+    ctx.beginPath(); ctx.moveTo(0, -10); ctx.lineTo(8, -2); ctx.lineTo(0, 10); ctx.lineTo(-8, -2); ctx.closePath();
+    ctx.fill(); ctx.stroke();
+    ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(-8, -2); ctx.lineTo(8, -2); ctx.stroke();
+  } else {
+    ctx.fillStyle = '#EC6FA7'; ctx.strokeStyle = '#FFD6E8'; ctx.lineWidth = 1.4;
+    ctx.beginPath();
+    const P = [[0, -10], [3, -3], [10, 0], [3, 3], [0, 10], [-3, 3], [-10, 0], [-3, -3]];
+    ctx.moveTo(P[0][0], P[0][1]);
+    for (let i = 1; i < P.length; i++) ctx.lineTo(P[i][0], P[i][1]);
+    ctx.closePath(); ctx.fill(); ctx.stroke();
+  }
+}
+
+const easeOutQ = u => 1 - (1 - u) * (1 - u);
+
+// 過場嘅畫面層(BOSS 自己畫唔到嘅:大爆炸、金幣、分數、「擊破」大字、白閃)
+function drawSerpentFinale() {
+  const D = SERPENT_DEATH, ft = game.finaleT, bx = game.finaleX, by = game.finaleY;
+  const edge = game.finaleEdge, core = game.finaleColor;
+
+  // 大爆炸
+  const u = ft - D.burst;
+  if (u >= 0 && u < D.burstLife) {
+    const ring = (t0, t1, t2, s0, s1, s2, color, lw) => {
+      if (u < t0 || u >= t2) return;
+      const k = u < t1 ? (u - t0) / (t1 - t0) : (u - t1) / (t2 - t1);
+      ctx.globalAlpha = u < t1 ? k : 1 - k;
+      ctx.strokeStyle = color; ctx.lineWidth = lw;
+      ctx.beginPath(); ctx.arc(bx, by, 60 * (u < t1 ? s0 + (s1 - s0) * k : s1 + (s2 - s1) * easeOutQ(k)), 0, Math.PI * 2);
+      ctx.stroke();
+    };
+    ring(0, .03, .8, .2, .4, 3.2, edge, 4);
+    ring(.12, .15, .87, .2, .3, 2.2, core, 3);
+    // 核心光球
+    if (u < .7) {
+      const sc = u < .05 ? .3 + 1.1 * u / .05 : u < .25 ? 1.4 - .2 * (u - .05) / .2 : 1.2 + .8 * (u - .25) / .45;
+      const a = u < .05 ? u / .05 : u < .25 ? .9 : .9 * (1 - (u - .25) / .45);
+      const r = 60 * sc, g = ctx.createRadialGradient(bx, by, 0, bx, by, r);
+      g.addColorStop(0, '#FFFFFF'); g.addColorStop(.25, '#FFF1B8'); g.addColorStop(.5, core); g.addColorStop(.72, 'rgba(236,111,167,0)');
+      ctx.globalAlpha = a; ctx.fillStyle = g;
+      ctx.beginPath(); ctx.arc(bx, by, r, 0, Math.PI * 2); ctx.fill();
+    }
+    // 十二條光芒
+    if (u < .6) {
+      const k = u < .05 ? u / .05 : (u - .05) / .55;
+      const sc = u < .05 ? .2 + .6 * k : .8 + .8 * k, rot = (u < .05 ? 8 * k : 8 + 17 * k) * Math.PI / 180;
+      ctx.globalAlpha = u < .05 ? k : 1 - k;
+      ctx.strokeStyle = '#FFF1B8'; ctx.lineWidth = 4; ctx.lineCap = 'round';
+      ctx.beginPath();
+      for (let i = 0; i < 12; i++) {
+        const a = rot + i * Math.PI / 6, c = Math.cos(a), s = Math.sin(a);
+        ctx.moveTo(bx + c * 26 * sc, by + s * 26 * sc); ctx.lineTo(bx + c * 70 * sc, by + s * 70 * sc);
+      }
+      ctx.stroke(); ctx.lineCap = 'butt';
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  // 金幣晶石:爆出 → 散開 → 浮一浮 → 逐粒飛去玩家度
+  if (ft >= D.lootOut) {
+    for (let i = 0; i < SERPENT_LOOT.length; i++) {
+      const [kind, ox, oy, spin] = SERPENT_LOOT[i];
+      const fly = D.lootFly + D.lootGap * i;
+      if (ft >= fly + D.lootFlyDur) continue;
+      let x, y, sc;
+      if (ft < D.lootSpread) {
+        const k = easeOutQ(clamp((ft - D.lootOut - .03) / (D.lootSpread - D.lootOut - .03), 0, 1));
+        x = bx + ox * k; y = by + oy * k; sc = ft < D.lootOut + .03 ? .3 + 6.7 * (ft - D.lootOut) : .5 + .5 * k;
+      } else {
+        const hx = bx + ox, hy = by + oy + 6 * clamp((ft - D.lootSpread) / (fly - D.lootSpread), 0, 1);
+        const k = clamp((ft - fly) / D.lootFlyDur, 0, 1), e2 = k * k;
+        x = hx + (player.x - hx) * e2; y = hy + (player.y - hy) * e2; sc = 1 - .5 * k;
+      }
+      ctx.save();
+      ctx.translate(x, y); ctx.rotate(ft / spin * Math.PI * 2); ctx.scale(sc, sc);
+      drawLoot(kind);
+      ctx.restore();
+    }
+  }
+
+  // 執晒:玩家四圍一個金圈 + 「+分數」升上去
+  const c0 = D.lootFly + D.lootFlyDur;
+  if (ft >= c0 && ft < c0 + .92) {
+    const k = ft < c0 + .07 ? (ft - c0) / .07 : (ft - c0 - .07) / .85;
+    ctx.globalAlpha = ft < c0 + .07 ? k : 1 - k;
+    ctx.strokeStyle = '#F2C94C'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(player.x, player.y, 50 * (ft < c0 + .07 ? .6 + .4 * k : 1 + .6 * k), 0, Math.PI * 2); ctx.stroke();
+    ctx.globalAlpha = 1;
+  }
+  const s0 = c0 + .07;
+  if (ft >= s0 && ft < s0 + 1.25) {
+    const v = ft - s0;
+    const dy = v < .15 ? -8 * v / .15 : v < 1 ? -8 - 22 * (v - .15) / .85 : -30 - 10 * (v - 1) / .25;
+    ctx.globalAlpha = v < .15 ? v / .15 : v < 1 ? 1 : 1 - (v - 1) / .25;
+    ctx.font = '700 18px "Chakra Petch", monospace';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillStyle = '#F2C94C';
+    ctx.fillText('+' + game.finaleReward.toLocaleString('en-US'), player.x, player.y - 50 + dy);
+    ctx.globalAlpha = 1;
+  }
+
+  // 「擊破」
+  if (ft >= D.bannerIn && ft < D.bannerOut) {
+    const k = clamp((ft - D.bannerIn) / (D.bannerFull - D.bannerIn), 0, 1);
+    const sc = ft < D.bannerFull ? 1.6 - .65 * k : Math.min(1, .95 + .05 * (ft - D.bannerFull) / .1);
+    ctx.save();
+    ctx.globalAlpha = ft < D.bannerHold ? k : 1 - (ft - D.bannerHold) / (D.bannerOut - D.bannerHold);
+    ctx.translate(W / 2, 247); ctx.scale(sc, sc);
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.letterSpacing = '6px';
+    ctx.font = '12px "Chakra Petch", monospace'; ctx.fillStyle = edge;
+    ctx.fillText(t('stageClear', game.wave), 3, -44);
+    ctx.letterSpacing = '8px';
+    ctx.font = '900 52px "Noto Sans TC", sans-serif'; ctx.fillStyle = ART.hudText;
+    ctx.shadowColor = edge; ctx.shadowBlur = 18;
+    ctx.fillText(t('bossBreak'), 4, -4);
+    ctx.shadowBlur = 0;
+    const lk = clamp((ft - D.bannerIn - .14) / .3, 0, 1);
+    ctx.fillStyle = edge; ctx.fillRect(-110 * lk, 27, 220 * lk, 2);
+    ctx.letterSpacing = '4px';
+    ctx.font = '13px "Chakra Petch", monospace'; ctx.fillStyle = '#B9C0E4';
+    ctx.fillText(BOSSES[game.finaleKind].label + ' DEFEATED', 2, 44);
+    ctx.letterSpacing = '0px';
+    ctx.restore();
+  }
+
+  // 白閃:最後一擊一下、大爆炸一下(大爆炸嗰下強啲)
+  const flash = ft < D.flash ? (ft < .03 ? .55 * ft / .03 : .55 * (1 - (ft - .03) / (D.flash - .03)))
+              : u >= 0 && u < .6 ? (u < .03 ? .75 * u / .03 : .75 * (1 - (u - .03) / .57)) : 0;
+  if (flash > 0) { ctx.globalAlpha = flash; ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, W, H); ctx.globalAlpha = 1; }
+}
+
+// 大爆炸之後 HUD 淡落去,畀「擊破」做主角
+function drawSerpentFinaleHud() {
+  const D = SERPENT_DEATH, k = clamp((game.finaleT - D.burst) / D.hudFade, 0, 1);
+  if (k <= 0) return;
+  ctx.globalAlpha = .75 * k; ctx.fillStyle = SERPENT_TONE.dark;
+  ctx.fillRect(0, 0, W, 76);
   ctx.globalAlpha = 1;
 }
 
 function drawSerpent(e) {
   // 時間用 now,唔好叫 t —— t 係 i18n 嘅文字 function,遮住咗下面就攞唔到「破綻!」
   const now = e.t, th = SERPENT.thick, n = SERPENT.nodes;
+  const dying = !!e.dying, ft = game.finaleT;     // 擊破演出:時間由最後一擊計起
   ctx.save();
-  if (e.dying) ctx.translate(rand(-4, 4), rand(-2, 2));
 
-  drawSerpentWarnsUnder(e);
+  if (!dying) drawSerpentWarnsUnder(e);
 
   // 觀望緊:玩家四圍有個淡淡嘅框,話畀你知佢望住你
-  if (e.stage === 'watch') {
+  if (!dying && e.stage === 'watch') {
     const pulse = .5 - .5 * Math.cos(now / 1.4 * Math.PI * 2);
     ctx.globalAlpha = .35 + .4 * pulse;
     drawCorners(player.x, player.y - 4, 42 * (1 + .12 * pulse), 14, e.core, 2);
@@ -397,11 +608,19 @@ function drawSerpent(e) {
     const x = e.segX[k], y = e.segY[k];
     if (x < -70 || x > W + 70 || y < -70 || y > H + 70) continue;   // 畫面外唔使畫
     const sc = SERPENT_SCALE[k], a = e.segA[k];
-    const wave = 3 * Math.sin((now + k * .16) / 2.6 * Math.PI * 2);   // 身體左右輕輕擺(純畫面)
+    let wave = 3 * Math.sin((now + k * .16) / 2.6 * Math.PI * 2);   // 身體左右輕輕擺(純畫面)
+    let pop = 1;
+    if (dying) {
+      const s0 = serpentDeathStart(k), D = SERPENT_DEATH;
+      if (ft >= s0 + D.gone) continue;                                // 呢節爆咗
+      pop = ft < s0 ? 1 : ft < s0 + D.swell ? 1 + .28 * (ft - s0) / D.swell
+                                            : 1.28 * (1 - (ft - s0 - D.swell) / (D.gone - D.swell));
+      wave = 4 * Math.sin((ft + k * .07) / (.28 + (k % 3) * .05) * Math.PI);   // 痛到亂扭
+    }
     ctx.save();
     ctx.translate(x - Math.sin(a) * wave, y + Math.cos(a) * wave);
     ctx.rotate(a);
-    ctx.scale(sc, sc * th);
+    ctx.scale(sc * pop, sc * th * pop);
     if (k === n - 1) poly(SERPENT_ART.tail, e.edge, SERPENT_TONE.dark, 2);
     ctx.strokeStyle = e.edge; ctx.lineWidth = 2.6; ctx.lineCap = 'round';
     ctx.beginPath();
@@ -421,6 +640,10 @@ function drawSerpent(e) {
     const white = Math.max(e.pflash, k === e.hitK ? e.flash : 0);
     if (white > 0) { ctx.globalAlpha = white * .55; poly(SERPENT_ART.seg, '#fff'); }
     ctx.globalAlpha = 1;
+    if (dying) {
+      drawCracks();
+      ctx.globalAlpha = serpentHeat(ft); poly(SERPENT_ART.seg, '#fff'); ctx.globalAlpha = 1;   // 發熱閃白
+    }
     ctx.restore();
   }
 
@@ -428,13 +651,19 @@ function drawSerpent(e) {
   ctx.save();
   ctx.translate(e.x, e.y);
   ctx.rotate(e.angle + e.aim);
-  if (e.stage === 'stuck') {                     // 撞完卡住:個頭震吓震吓,越震越細
+  if (dying) {                                   // 個頭掙扎:越嚟越大力,之後脹大
+    const D = SERPENT_DEATH, u = clamp(ft / D.headSwell, 0, 1), amp = (2 + 12 * u) * Math.PI / 180;
+    ctx.translate((1 + 4 * u) * Math.sin(ft * 23.1), (1 + 4 * u) * Math.cos(ft * 19.7));
+    ctx.rotate(amp * Math.sin(ft * 17.3) * Math.cos(ft * 7.1));
+    const sw = 1 + .35 * clamp((ft - D.headSwell) / (D.burst - D.headSwell), 0, 1);
+    ctx.scale(sw, sw);
+  } else if (e.stage === 'stuck') {                     // 撞完卡住:個頭震吓震吓,越震越細
     const k = Math.max(0, 1 - e.stageT / SERPENT_LURK.stuck);
     ctx.translate(rand(-4, 4) * k, rand(-2, 2) * k);
     ctx.rotate(rand(-.09, .09) * k);
   }
   // 伸脷:觀望嗰陣間唔中「嘶」一下
-  if (e.stage === 'watch' && (now % 2.4) < .3) {
+  if (!dying && e.stage === 'watch' && (now % 2.4) < .3) {
     const f = Math.sin((now % 2.4) / .3 * Math.PI);
     ctx.strokeStyle = SERPENT_TONE.red; ctx.lineWidth = 2.4; ctx.lineCap = 'round';
     ctx.beginPath();
@@ -461,8 +690,13 @@ function drawSerpent(e) {
   }
   const white = Math.max(e.pflash, e.hitK === 0 ? e.flash : 0);
   if (white > 0) { ctx.globalAlpha = white * .55; poly(SERPENT_ART.head, '#fff'); ctx.globalAlpha = 1; }
+  if (dying) {
+    drawCracks();
+    ctx.globalAlpha = serpentHeadHot(ft); poly(SERPENT_ART.head, '#fff'); ctx.globalAlpha = 1;
+  }
   ctx.restore();
 
+  if (dying) { drawSerpentPops(e, ft); ctx.restore(); return; }   // 演緊擊破:下面啲預警同提示唔使畫
   drawSerpentWarnsOver(e);
 
   // 撞落去嗰下:撞擊圈 + 一閃白

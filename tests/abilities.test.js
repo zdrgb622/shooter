@@ -24,7 +24,7 @@ test('每個能力 apply 之後真係改到對應數值', () => {
     thrust: g => g.player.speed,
     shield: g => g.player.shield,
     magnet: g => g.player.magnet,
-    life: g => g.player.lives,
+    life: g => g.player.maxHp,
   };
   for (const a of loadGame().g.ABILITIES) {
     assert.ok(checks[a.id], `${a.id} 未有對應檢查,新加能力記得喺呢度加一行`);

@@ -20,12 +20,18 @@ function draw() {
   for (const u of powerups) drawPowerup(u);
   for (const e of enemies) drawEnemy(e);
   drawBullets();
+  drawBomb();
+  drawFx('blast');
   // 揀能力同過場嗰陣架機都要留喺度 —— 突然唔見咗會以為自己死咗
   if (shipOnScreen()) drawPlayer();
+  drawFx('spark');
   ctx.restore();
+  if (shipOnScreen()) drawChargeFlashes();
 
   if (game.state === 'finale') drawFinale();
   drawHUD();
+  if (game.state === 'finale' && BOSSES[game.finaleKind] && BOSSES[game.finaleKind].drawFinaleHud)
+    BOSSES[game.finaleKind].drawFinaleHud();   // 例如爆完之後 HUD 淡落去
   if (game.state === 'title') drawTitle();
   else langButtons.length = 0;
   if (game.state === 'over') drawOver();
@@ -101,14 +107,280 @@ function drawBullets() {
   ctx.shadowBlur = 0;
 }
 
+// 炸彈衝擊波:由架機位置一個大圈擴散出去
+const BOMB_LIFE = .45;
+function drawBomb() {
+  const u = game.bombT / BOMB_LIFE;
+  if (u >= 1) return;
+  const r = 30 + (1 - (1 - u) * (1 - u)) * 820;
+  ctx.save();
+  ctx.globalAlpha = 1 - u;
+  ctx.strokeStyle = ART.hudHi; ctx.lineWidth = 10 * (1 - u) + 2;
+  ctx.beginPath(); ctx.arc(game.bombX, game.bombY, r, 0, Math.PI * 2); ctx.stroke();
+  ctx.globalAlpha = (1 - u) * .18;
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, W, H);
+  ctx.restore();
+}
+
+// ---------- 擦彈儲力:紅轉白 + 彗星爆衝(照設計檔「彗星爆衝+紅轉白」) ----------
+// 儲緊:架機、背光、尾焰慢慢變紅,尾焰越嚟越長;儲滿即刻轉白熱。放手:變彗星衝上去。
+const HEAT = {
+  red: '#FF7A45',    // 儲力色
+  white: '#7FE7FF',  // 滿格色(白熱)
+  boom: '#FF7A45',   // 撞中敵機嘅火球色
+  k: .85,            // 升溫強度:紅 / 白嘅最深程度
+  flameW: .4,        // 尾焰闊度
+  flameLen: 1,       // 尾焰最長
+  cometW: .8,        // 彗星闊度
+};
+
+const SHIP_OUTLINE = [[28, 0], [54, 56], [40, 52], [28, 60], [16, 52], [2, 56]];
+function shipPath() { ctx.beginPath(); polyPath(SHIP_OUTLINE); }
+
+// 儲滿嗰下「爆」一爆:.9 → .65 → 1
+const fullPulse = t => (t < .06 ? .9 : t < .18 ? .65 + .35 * (t - .06) / .12 : 1);
+
+// 而家架機有幾熱。dash 中途用衝刺嘅時間,否則用擦彈儲咗幾多
+function playerHeat() {
+  const p = player, d = p.dash, C = COMET;
+  if (d) {
+    const t = d.t, fade = clamp(1 - t / .2, 0, 1), f = clamp(1 - t / .1, 0, 1);
+    const back = t >= cometBackAt();
+    return { glowRed: .25 * fade, glowWhite: fade, tintRed: 0,
+             tintWhite: t < cometRiseEnd() ? 1 : t < cometRiseEnd() + .02 ? .6 : 0,
+             flameX: back ? .8 : .6 + .65 * f, flameY: back ? .25 : .3 + .7 * f,
+             flameRed: back ? 1 : .25 * f, flameWhite: back ? 0 : f };
+  }
+  const k = clamp(p.graze / GRAZE.full, 0, 1), full = k >= 1;
+  return { glowRed: full ? .25 : .9 * k, glowWhite: full ? fullPulse(p.fullT) : 0,
+           tintRed: full ? 0 : .65 * k, tintWhite: full ? fullPulse(p.fullT) : 0,
+           flameX: .8 + .45 * k, flameY: .25 + .75 * k, flameRed: full ? .25 : 1, flameWhite: full ? 1 : 0 };
+}
+
+// 尾焰:本地座標(戰機圖 56×64),由 (28, 54) 向下噴
+function drawFlame(h) {
+  const fl = 1 + .09 * Math.sin(performance.now() / 11);         // 每幀跳動
+  ctx.save();
+  ctx.translate(28, 54);
+  ctx.scale(HEAT.flameW * h.flameX * fl, HEAT.flameLen * h.flameY * (2 - fl));
+  ctx.translate(-30, 0);
+  const tear = (x0, depth, x1, color, a) => {
+    ctx.globalAlpha = a; ctx.fillStyle = color;
+    ctx.beginPath(); ctx.moveTo(x0, 0); ctx.quadraticCurveTo(30, depth, x1, 0); ctx.closePath(); ctx.fill();
+  };
+  if (h.flameRed > 0) {
+    tear(6, 98, 54, HEAT.red, .95 * h.flameRed);
+    tear(15, 66, 45, '#FFB38A', h.flameRed);
+    tear(23, 36, 37, '#FFE2C8', h.flameRed);
+  }
+  if (h.flameWhite > 0) {
+    ctx.shadowColor = HEAT.white; ctx.shadowBlur = 6;
+    tear(7, 104, 53, HEAT.white, .92 * h.flameWhite);
+    ctx.shadowBlur = 0;
+    tear(16, 74, 44, '#FFFFFF', h.flameWhite);
+    ctx.globalAlpha = .55 * h.flameWhite; ctx.fillStyle = HEAT.red;
+    ctx.beginPath(); polyPath([[30, 8], [35, 16], [30, 24], [25, 16]]); polyPath([[30, 30], [34, 37], [30, 44], [26, 37]]); ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+  ctx.restore();
+}
+
+// 背光:紅 / 白嘅圓形光暈
+function drawHeatGlow(h) {
+  for (const [a, color] of [[h.glowRed, HEAT.red], [h.glowWhite, HEAT.white]]) {
+    if (a <= 0) continue;
+    const g = ctx.createRadialGradient(28, 32, 0, 28, 32, 75);
+    g.addColorStop(0, color); g.addColorStop(.68, 'rgba(0,0,0,0)');
+    ctx.globalAlpha = a * HEAT.k; ctx.fillStyle = g;
+    ctx.beginPath(); ctx.arc(28, 32, 75, 0, Math.PI * 2); ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+}
+
+// 彗星光罩:水滴形,包住架機向下拖
+function drawCometAura(t) {
+  const a = clamp(t / .1, 0, 1), sc = t < .1 ? .6 + .4 * a : 1 + .05 * clamp((t - .1) / (cometRiseEnd() - .1), 0, 1);
+  ctx.save();
+  ctx.translate(28, 30); ctx.scale(HEAT.cometW * sc, sc); ctx.translate(0, -2);
+  ctx.globalAlpha = a;
+  const g = ctx.createLinearGradient(0, -44, 0, 136);
+  g.addColorStop(0, 'rgba(255,255,255,.95)'); g.addColorStop(.3, HEAT.white); g.addColorStop(1, 'rgba(127,231,255,0)');
+  ctx.fillStyle = g;
+  ctx.beginPath();
+  ctx.moveTo(0, -44); ctx.bezierCurveTo(14, -38, 20, -8, 18, 20); ctx.bezierCurveTo(16, 56, 8, 100, 0, 136);
+  ctx.bezierCurveTo(-8, 100, -16, 56, -18, 20); ctx.bezierCurveTo(-20, -8, -14, -38, 0, -44); ctx.fill();
+  ctx.globalAlpha = .75 * a; ctx.fillStyle = '#FFFFFF';
+  ctx.beginPath();
+  ctx.moveTo(0, -30); ctx.bezierCurveTo(6, -24, 8, 0, 7, 20); ctx.bezierCurveTo(6, 50, 3, 80, 0, 104);
+  ctx.bezierCurveTo(-3, 80, -6, 50, -7, 20); ctx.bezierCurveTo(-8, 0, -6, -24, 0, -30); ctx.fill();
+  ctx.restore();
+  ctx.globalAlpha = 1;
+}
+
+// 彗星拖出嚟嗰條光柱 + 殘影(畫面座標)
+function drawCometTrail(d) {
+  const t = d.t, t0 = COMET.crouch + COMET.stretch, tEnd = cometRiseEnd();
+  if (t < t0 || t > tEnd + .6) return;
+  const a = .9 * (t < tEnd ? 1 : 1 - (t - tEnd) / .6);
+  const yb = d.y0 + 22, yt = t < tEnd ? player.y : d.y0 - d.dist;
+  if (yb > yt) {
+    const w = 28 * HEAT.cometW, g = ctx.createLinearGradient(0, yb, 0, yt);
+    g.addColorStop(0, HEAT.white); g.addColorStop(.45, 'rgba(255,255,255,.45)'); g.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.globalAlpha = a; ctx.fillStyle = g;
+    ctx.fillRect(d.x0 - w / 2, yt, w, yb - yt);
+    const c = ctx.createLinearGradient(0, yb, 0, yt);
+    c.addColorStop(0, '#FFFFFF'); c.addColorStop(.7, 'rgba(255,255,255,0)');
+    ctx.fillStyle = c;
+    ctx.fillRect(d.x0 - 4 * HEAT.cometW, yt, 8 * HEAT.cometW, yb - yt);
+  }
+  // 殘影:四個白色機影跟住後面
+  for (let i = 0; i < 4; i++) {
+    const tg = t - .03 * (i + 1);
+    if (tg < t0 || t > tEnd + .13) continue;
+    ctx.globalAlpha = (.4 - .1 * i) * (t < tEnd ? 1 : .3);
+    ctx.save();
+    ctx.translate(d.x0, d.y0 + cometOffset(d, tg));
+    ctx.scale(.72 * .92, .72 * 1.15); ctx.translate(-28, -30);
+    shipPath(); ctx.fillStyle = HEAT.white; ctx.fill();
+    ctx.restore();
+  }
+  ctx.globalAlpha = 1;
+}
+
+// 儲滿嗰陣:架機四圍彈一個白圈;同埋「放手 / 停火」提示
+function drawChargeCue() {
+  const p = player, d = p.dash, full = p.graze >= GRAZE.full;
+  if (full && !d && p.fullT < .45) {
+    const t = p.fullT, sc = t < .03 ? .4 + .4 * t / .03 : .8 + 1.2 * (t - .03) / .42;
+    ctx.globalAlpha = t < .03 ? t / .03 : 1 - (t - .03) / .42;
+    ctx.strokeStyle = HEAT.white; ctx.lineWidth = 3; ctx.shadowColor = HEAT.white; ctx.shadowBlur = 14;
+    ctx.beginPath(); ctx.arc(p.x, p.y, 55 * sc, 0, Math.PI * 2); ctx.stroke();
+    ctx.shadowBlur = 0; ctx.globalAlpha = 1;
+  }
+  // 提示:儲滿 .16 秒之後彈出嚟,放手之後 .3 秒淡走
+  let a = 0, dy = 0, sc = 1;
+  if (full && !d && p.fullT > .16) {
+    const k = clamp((p.fullT - .16) / .1, 0, 1);
+    a = k; dy = 6 * (1 - k); sc = .8 + .25 * k;
+  } else if (d && d.t < .3) { a = 1 - d.t / .3; dy = -4 - 6 * d.t / .3; }
+  if (a <= 0) return;
+  const main = t('releaseCue'), sub = t('releaseCueSub');
+  ctx.font = '900 13px "Noto Sans TC", sans-serif';
+  const w1 = ctx.measureText(main).width;
+  ctx.font = '10px "Chakra Petch", monospace';
+  const w2 = ctx.measureText(sub).width;
+  const w = 6 + 18 + 6 + w1 + 6 + w2 + 10, h = 32;
+  const cx = d ? d.x0 : p.x, cy = d ? d.y0 : p.y;
+  let x = cx + 30;
+  if (x + w > W - 6) x = cx - 30 - w;                 // 貼住右邊就擺去左邊
+  const y = cy - 50 + dy;
+  ctx.save();
+  ctx.globalAlpha = a;
+  ctx.translate(x, y); ctx.scale(sc, sc);
+  ctx.fillStyle = '#E8ECFF';
+  ctx.beginPath(); ctx.roundRect ? ctx.roundRect(0, 0, w, h, 14) : ctx.rect(0, 0, w, h); ctx.fill();
+  // 手指向上嘅圖示
+  ctx.translate(6, 5);
+  ctx.strokeStyle = '#0B1026'; ctx.lineWidth = 2; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+  ctx.beginPath(); ctx.roundRect ? ctx.roundRect(5, 9, 8, 12, 4) : ctx.rect(5, 9, 8, 12); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(9, 6); ctx.lineTo(9, 1); ctx.moveTo(5, 4); ctx.lineTo(9, .5); ctx.lineTo(13, 4); ctx.stroke();
+  ctx.lineCap = 'butt';
+  ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+  ctx.font = '900 13px "Noto Sans TC", sans-serif'; ctx.fillStyle = '#0B1026';
+  ctx.fillText(main, 24, 11);
+  ctx.font = '10px "Chakra Petch", monospace'; ctx.fillStyle = '#3A4480';
+  ctx.fillText(sub, 24 + w1 + 6, 11);
+  ctx.restore();
+}
+
+// 全畫面白閃:儲滿嗰下(淡)、放手嗰下(強啲)
+function drawChargeFlashes() {
+  const p = player, d = p.dash;
+  let a = 0;
+  if (p.graze >= GRAZE.full && !d && p.fullT < .2) a = p.fullT < .02 ? .25 * p.fullT / .02 : .25 * (1 - (p.fullT - .02) / .18);
+  if (d && d.t < .2) a = d.t < .03 ? .35 * d.t / .03 : .35 * (1 - (d.t - .03) / .17);
+  if (a <= 0) return;
+  ctx.globalAlpha = a; ctx.fillStyle = '#FFFFFF'; ctx.fillRect(0, 0, W, H); ctx.globalAlpha = 1;
+}
+
+// 特效:擦彈火花(八條光)、彗星撞中嘅火球(核心 + 光圈 + 六塊花瓣 + 分數)
+function drawFx(kind) {
+  for (const f of fx) {
+    if (f.kind !== kind) continue;
+    const t = f.t;
+    ctx.save();
+    ctx.translate(f.x, f.y);
+    if (kind === 'spark') {
+      const sc = t < .03 ? .3 + .85 * t / .03 : 1.15 + .35 * (t - .03) / .2;
+      ctx.globalAlpha = t < .03 ? t / .03 : clamp(1 - (t - .03) / .2, 0, 1);
+      ctx.scale(sc, sc);
+      ctx.strokeStyle = '#FFF1B8'; ctx.lineWidth = 2; ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.moveTo(0, -12); ctx.lineTo(0, -5); ctx.moveTo(0, 5); ctx.lineTo(0, 12);
+      ctx.moveTo(-12, 0); ctx.lineTo(-5, 0); ctx.moveTo(5, 0); ctx.lineTo(12, 0);
+      ctx.moveTo(-8, -8); ctx.lineTo(-4, -4); ctx.moveTo(4, 4); ctx.lineTo(8, 8);
+      ctx.moveTo(8, -8); ctx.lineTo(4, -4); ctx.moveTo(-4, 4); ctx.lineTo(-8, 8);
+      ctx.stroke(); ctx.lineCap = 'butt';
+    } else {
+      // 六塊花瓣
+      if (t < .5) {
+        const sx = t < .05 ? .1 + .5 * t / .05 : .6 + .55 * (t - .05) / .45;
+        ctx.globalAlpha = t < .05 ? t / .05 : 1 - (t - .05) / .45;
+        for (let i = 0; i < 6; i++) {
+          ctx.save();
+          ctx.rotate((f.rot + i * 60) * Math.PI / 180);
+          const g = ctx.createLinearGradient(0, 0, 105 * sx, 0);
+          g.addColorStop(0, '#FFF1B8'); g.addColorStop(.5, HEAT.boom); g.addColorStop(1, 'rgba(255,77,109,0)');
+          ctx.fillStyle = g;
+          ctx.beginPath(); ctx.roundRect ? ctx.roundRect(0, -11, 105 * sx, 22, 11) : ctx.rect(0, -11, 105 * sx, 22); ctx.fill();
+          ctx.restore();
+        }
+      }
+      // 光圈
+      if (t < .65) {
+        const sc = t < .04 ? .2 + .15 * t / .04 : .35 + .9 * (t - .04) / .61;
+        ctx.globalAlpha = t < .04 ? t / .04 : 1 - (t - .04) / .61;
+        ctx.strokeStyle = HEAT.boom; ctx.lineWidth = 3;
+        ctx.beginPath(); ctx.arc(0, 0, 120 * sc, 0, Math.PI * 2); ctx.stroke();
+      }
+      // 火球核心
+      if (t < .85) {
+        const sc = t < .05 ? .2 + .8 * t / .05 : t < .3 ? 1 + .05 * (t - .05) / .25 : 1.05 + .15 * (t - .3) / .55;
+        ctx.globalAlpha = t < .05 ? t / .05 : t < .3 ? 1 - .15 * (t - .05) / .25 : .85 * (1 - (t - .3) / .55);
+        const r = 105 * sc, g = ctx.createRadialGradient(0, 0, 0, 0, 0, r);
+        g.addColorStop(0, '#FFFFFF'); g.addColorStop(.2, '#FFF1B8'); g.addColorStop(.38, '#F2C94C');
+        g.addColorStop(.56, HEAT.boom); g.addColorStop(.72, 'rgba(255,77,109,0)');
+        ctx.fillStyle = g;
+        ctx.beginPath(); ctx.arc(0, 0, r, 0, Math.PI * 2); ctx.fill();
+      }
+      // 分數升上去
+      if (f.score) {
+        const dy = t < .1 ? -6 * t / .1 : t < .9 ? -6 - 16 * (t - .1) / .8 : -22 - 6 * (t - .9) / .2;
+        ctx.globalAlpha = t < .1 ? t / .1 : t < .9 ? 1 : clamp(1 - (t - .9) / .2, 0, 1);
+        ctx.font = '700 14px "Chakra Petch", monospace'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillStyle = '#F2C94C';
+        ctx.fillText('+' + f.score, 0, -20 + dy);
+      }
+    }
+    ctx.restore();
+  }
+  ctx.globalAlpha = 1;
+}
+
 function drawPlayer() {
-  const p = player;
-  if (p.inv > 0 && Math.floor(p.inv * 14) % 2 === 0) return;
+  const p = player, d = p.dash;
+  if (!d && p.inv > 0 && Math.floor(p.inv * 14) % 2 === 0) return;
+  const h = playerHeat();
+
+  if (d) drawCometTrail(d);
 
   ctx.save();
   ctx.translate(p.x, p.y);
+  // 啱啱儲滿:震一震
+  if (!d && p.graze >= GRAZE.full && p.fullT < .3) ctx.translate(1.3 * Math.sin(p.fullT * 110), .9 * Math.cos(p.fullT * 90));
 
-  if (p.shield > 0) {
+  if (p.shield > 0 && !d) {
     ctx.strokeStyle = 'rgba(79,209,197,.75)';
     ctx.lineWidth = 2;
     for (let i = 0; i < p.shield; i++) {
@@ -117,19 +389,37 @@ function drawPlayer() {
   }
 
   ctx.scale(.72, .72);
+  // 彗星:蹲低嗰下壓扁,衝上去嗰陣拉長
+  if (d) {
+    const t = d.t, C = COMET;
+    let sx = 1, sy = 1;
+    if (t < C.crouch) { const u = t / C.crouch; sx = 1 + .12 * u; sy = 1 - .1 * u; }
+    else if (t < C.crouch + C.stretch) { const u = (t - C.crouch) / C.stretch; sx = 1.12 - .2 * u; sy = .9 + .25 * u; }
+    else if (t < cometRiseEnd()) { sx = .92; sy = 1.15; }
+    ctx.scale(sx, sy);
+  }
   ctx.translate(-28, -30);
 
-  // 火焰喺機尾(本地 y=58)向下拉長,每幀跳動一下
-  ctx.save();
-  ctx.translate(0, 58); ctx.scale(1, rand(.75, 1.35)); ctx.translate(0, -58);
-  drawShapes(SHIP.flame, ART.flame);
-  drawShapes(SHIP.flameIn, ART.flameIn);
-  ctx.restore();
+  drawHeatGlow(h);
+  if (h.flameRed > 0 || h.flameWhite > 0) drawFlame(h);
+  if (d && d.t < cometRiseEnd()) drawCometAura(d.t);
 
   drawShapes(SHIP.body, ART.pBody, ART.pTrim, 2);
   drawShapes(SHIP.trim, ART.pTrim);
   drawShapes(SHIP.accent, ART.pAccent);
+  // 機身中間一粒紅點(設計檔)
+  ctx.fillStyle = '#FF4D6D'; ctx.strokeStyle = '#FFFFFF'; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.arc(28, 34, 2.6, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+  // 升溫:先紅,滿咗轉白熱
+  if (h.tintRed > 0) { ctx.globalAlpha = h.tintRed * HEAT.k; shipPath(); ctx.fillStyle = HEAT.red; ctx.fill(); }
+  if (h.tintWhite > 0) {
+    ctx.globalAlpha = h.tintWhite; shipPath(); ctx.fillStyle = HEAT.white; ctx.fill();
+    ctx.globalAlpha = .6 * h.tintWhite; ctx.fillStyle = HEAT.red;
+    ctx.beginPath(); polyPath([[28, 22], [30, 34], [26, 34]]); ctx.fill();
+  }
+  ctx.globalAlpha = 1;
   ctx.restore();
+  drawChargeCue();
 }
 
 function drawEnemy(e) {
@@ -226,8 +516,9 @@ function drawHUD() {
   ctx.fillText(t('high') + ' ' + highScore, 12, 46);
   ctx.globalAlpha = 1;
 
-  const finaleBar = game.state === 'finale' && game.finaleT < FINALE.barDrain
-    ? game.finaleBar * (1 - game.finaleT / FINALE.barDrain) : null;
+  const drain = finaleOf(game.finaleKind).barDrain;
+  const finaleBar = game.state === 'finale' && game.finaleT < drain
+    ? game.finaleBar * (1 - game.finaleT / drain) : null;
   if (boss || finaleBar !== null) {
     const pct = finaleBar !== null ? finaleBar : clamp(boss.hp / boss.maxhp, 0, 1);
     const def = BOSSES[boss ? boss.kind : game.finaleKind];
@@ -253,15 +544,33 @@ function drawHUD() {
   }
 }
 
+const HP_COLOR = '#FF4D6D';   // 玩家血條(紅)
+
 function drawBottomPanel() {
   const x = 14, y = H - 46;
-  const heart = Math.round(18 * HUD_BOT_K), gap = Math.round(20 * HUD_BOT_K);
+  const heart = Math.round(18 * HUD_BOT_K);
 
-  ctx.font = `${heart}px "Chakra Petch", monospace`;
-  ctx.textAlign = 'left';
+  // 血條:闊度跟最大血量變(「強化機體」之後會長啲)。白色嗰截 = 啱啱扣咗嘅血
+  const p = player, unit = 1.1 * HUD_BOT_K;
+  const bw0 = Math.round(p.maxHp * unit), bh0 = Math.round(10 * HUD_BOT_K), by = y + Math.round((heart - bh0) / 2);
+  const k = clamp(p.hp / p.maxHp, 0, 1), kShown = clamp(p.hpShown / p.maxHp, 0, 1);
+  const low = k <= HP.low && k > 0;
+  ctx.fillStyle = 'rgba(232,236,255,.14)';
+  ctx.fillRect(x, by, bw0, bh0);
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(x, by, Math.round(bw0 * kShown), bh0);
+  ctx.globalAlpha = low ? .55 + .45 * Math.sin(performance.now() / 90) : 1;
+  ctx.fillStyle = HP_COLOR;
+  ctx.fillRect(x, by, Math.round(bw0 * k), bh0);
+  ctx.globalAlpha = 1;
+  ctx.strokeStyle = 'rgba(232,236,255,.35)'; ctx.lineWidth = 1;
+  ctx.strokeRect(x + .5, by + .5, bw0 - 1, bh0 - 1);
+  // 數值:例如 80/100。血少嗰陣轉紅
+  ctx.font = `700 ${Math.round(11 * HUD_BOT_K)}px "Chakra Petch", monospace`;
+  ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+  ctx.fillStyle = low ? HP_COLOR : ART.hudText;
+  ctx.fillText(Math.ceil(p.hp) + '/' + p.maxHp, x + bw0 + 6, by + bh0 / 2 + 1);
   ctx.textBaseline = 'top';
-  ctx.fillStyle = ART.pAccent;
-  for (let i = 0; i < Math.max(0, player.lives); i++) ctx.fillText('♥', x + i * gap, y);
 
   const bw = Math.round(10 * HUD_BOT_K), bh = Math.round(9 * HUD_BOT_K), bgap = bw + 3;
   for (let i = 0; i < 5; i++) {
@@ -350,6 +659,8 @@ function drawOver() {
 const span = (t, a, b) => clamp((t - a) / (b - a), 0, 1);
 
 function drawFinale() {
+  const own = BOSSES[game.finaleKind] && BOSSES[game.finaleKind].drawFinale;
+  if (own) { own(); return; }                 // 呢隻 BOSS 有自己一套(例如星蛇嘅擊破演出)
   const ft = game.finaleT, x = game.finaleX, y = game.finaleY;
 
   // 三個擴散光環

@@ -75,14 +75,14 @@ const ABILITIES = [
   },
   {
     id: 'life', cat: '防禦', rarity: '傳說', max: 1,
-    name: { 'zh-Hant': '額外生命', 'zh-Hans': '额外生命', en: 'Extra Life' },
+    name: { 'zh-Hant': '強化機體', 'zh-Hans': '强化机体', en: 'Reinforced Hull' },
     desc: {
-      'zh-Hant': '即刻 +1 條命,每局只可以揀一次。',
-      'zh-Hans': '即刻 +1 条命,每局只可以拣一次。',
-      en: 'Gain one life. Once per run.',
+      'zh-Hant': '最大血量 +25,即刻補滿。每局只可以揀一次。',
+      'zh-Hans': '最大血量 +25,立即补满。每局只可以拣一次。',
+      en: 'Max HP +25 and fully repaired. Once per run.',
     },
     icon: 'M16 27 L5 16 A6 6 0 0 1 16 8 A6 6 0 0 1 27 16 Z',
-    apply: () => { player.lives++; },
+    apply: () => { player.maxHp += 25; player.hp = player.maxHp; },
   },
 ];
 

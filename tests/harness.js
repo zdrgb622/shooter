@@ -143,7 +143,7 @@ function loadGame() {
         enemies.length = 0; game.queue.length = 0;
         bullets.length = 0; ebullets.length = 0; powerups.length = 0;
         player.x = W / 2; player.y = H - 110;
-        player.inv = 0; player.lives = 3; player.shield = 0; player.level = 1;
+        player.inv = 0; player.hp = player.maxHp = player.hpShown = HP.max; player.shield = 0; player.level = 1;
         player.abilities = {}; player.fireRateMult = 1; player.magnet = 0;
         player.speed = 440;
         game.crystals = 0; game.combo = 0; game.comboT = 0;

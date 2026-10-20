@@ -2,7 +2,8 @@
 //   1. 條身真係跟住個頭行過嘅路
 //   2. 每招都喺畫面外開始、畫面外結束 —— 換路嗰陣玩家睇唔到佢瞬移
 //   3. 每一下攻擊之前都有預警,而且預警夠早
-//   4. 頭槌撞「鎖定嗰刻」玩家個位;撞完卡住打頭雙倍
+//   4. 頭槌向住「鎖定嗰刻」玩家個位一直撞到畫面邊(撞牆);撞完卡住打頭雙倍
+//   5. 衝刺瞄住玩家當刻個位直線衝過畫面
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -52,7 +53,7 @@ test('轉彎時條身會跟住彎,唔係成條直住移動', () => {
 });
 
 for (const [name, expr] of [['潛伏(一下頭槌)', 'serpentLurk(1)'], ['潛伏(兩下頭槌)', 'serpentLurk(2)'],
-                            ['直插', "serpentDash('A')"], ['斜角', "serpentDash('B')"],
+                            ['衝向玩家', 'serpentCharge()'],
                             ['三連衝', "serpentDash('C')"], ['包圍', "serpentDash('D')"]]) {
   test(`${name}:由畫面外開始,喺畫面外結束`, () => {
     const { game, g, b } = serpent();
@@ -71,11 +72,11 @@ for (const [name, expr] of [['潛伏(一下頭槌)', 'serpentLurk(1)'], ['潛伏
 // 每款衝刺:由預警出現,到個頭真係衝到預警嗰個位,最少要有幾耐
 const MIN_WARNING = .75;
 
-for (const v of ['A', 'B', 'C', 'D']) {
+for (const [v, expr] of [['衝向玩家', 'serpentCharge()'], ['C', "serpentDash('C')"], ['D', "serpentDash('D')"]]) {
   test(`衝刺 ${v}:每一下衝之前,預警最少早 ${MIN_WARNING} 秒`, () => {
     const { game, g, b } = serpent();
     g.player.x = 240; g.player.y = 560;
-    force(game, b, `serpentDash('${v}')`);
+    force(game, b, expr);
     const arrived = [];
     let prevY = b.y;
     runMove(g, b, () => {
@@ -84,7 +85,7 @@ for (const v of ['A', 'B', 'C', 'D']) {
         if (arrived[i] !== undefined || b.cycle < w.t0) continue;
         let hit = false;
         if (w.kind === 'col') hit = prevY < 0 && b.y >= 0 && Math.abs(b.x - w.x) < 30;    // 由頂衝入嗰條直路
-        if (w.kind === 'diag') hit = b.x > 0 && b.x < g.W && b.y > 0 && b.y < g.H;        // 斜插入畫面
+        if (w.kind === 'charge') hit = b.x > 0 && b.x < g.W && b.y > 0 && b.y < g.H;      // 衝入畫面
         if (w.kind === 'ring') hit = Math.hypot(b.x - w.x, b.y - w.y) < w.r + 10;          // 去到個圈
         if (hit) arrived[i] = b.cycle - w.t0;
       }
@@ -105,15 +106,44 @@ function untilStage(g, b, stage) {
   assert.equal(b.stage, stage, `應該行到 ${stage}`);
 }
 
-test('頭槌撞嘅係「鎖定嗰刻」玩家個位,唔係玩家而家個位', () => {
+test('頭槌向住「鎖定嗰刻」玩家個位撞到牆,唔係追住玩家而家個位', () => {
   const { game, g, b } = serpent();
   force(game, b, 'serpentLurk(1)');
   g.player.x = 180; g.player.y = 560;
   untilStage(g, b, 'pull');                        // 已經鎖定咗
+  const line = b.warns.find(w => w.kind === 'lunge');
   g.player.x = 400; g.player.y = 620;              // 玩家閃開
   untilStage(g, b, 'stuck');
-  assert.ok(Math.hypot(b.x - 180, b.y - 560) < 60, `應該撞去 (180, 560),而家喺 (${b.x | 0}, ${b.y | 0})`);
-  assert.ok(Math.hypot(b.x - 400, b.y - 620) > 150, '唔應該追住玩家');
+  const toWall = Math.min(b.x, g.W - b.x, b.y, g.H - b.y);
+  assert.ok(toWall < g.SERPENT_LURK.wallGap + 10, `個頭應該貼住畫面邊,而家離邊 ${toWall | 0}`);
+  const want = Math.atan2(560 - line.y, 180 - line.x);
+  const got = Math.atan2(b.y - line.y, b.x - line.x);
+  assert.ok(Math.abs(g.angleDiff(got, want)) < .05, '應該向住鎖定嗰點撞');
+  assert.ok(Math.abs(g.angleDiff(got, Math.atan2(620 - line.y, 400 - line.x))) > .1, '唔應該追住玩家');
+});
+
+test('潛伏 restUp 越大,停定嗰陣企得越後(越高)', () => {
+  const restY = up => {
+    const { game, g, b } = serpent();
+    game.run(`SERPENT_LURK.restUp = ${up}`);
+    force(game, b, 'serpentLurk(1)');
+    untilStage(g, b, 'watch');
+    return b.y;
+  };
+  const y0 = restY(0), y1 = restY(120);
+  assert.ok(Math.abs(y0 - y1 - 120) < 15, `restUp 0 → y ${y0 | 0},120 → y ${y1 | 0}`);
+});
+
+test('衝向玩家:條線會經過玩家起步時個位', () => {
+  for (let i = 0; i < 10; i++) {                   // 起步位隨機,試多幾次
+    const { game, g, b } = serpent();
+    g.player.x = 100 + i * 30; g.player.y = 600 - i * 15;
+    const px = g.player.x, py = g.player.y;
+    force(game, b, 'serpentCharge()');
+    let closest = Infinity;
+    runMove(g, b, () => { closest = Math.min(closest, Math.hypot(b.x - px, b.y - py)); });
+    assert.ok(closest < 15, `個頭最近離玩家 ${closest | 0}px`);
+  }
 });
 
 test('頭槌之前一定有預警線同準星', () => {
@@ -142,18 +172,18 @@ test('撞完卡住:打頭雙倍,打身一倍;平時打頭一倍', () => {
   assert.equal(g.serpentHit(b, { x: -500, y: -500, r: 4 }), 0, '打唔中就係 0');
 });
 
-test('撞到條身會扣命', () => {
+test('撞到條身會扣血(撞機嘅傷害)', () => {
   const { g, b } = serpent();
   for (let i = 0; i < 60 * 2; i++) g.updateBoss(b, DT);
   g.player.inv = 0;
   g.player.x = b.segX[10]; g.player.y = b.segY[10];
   g.updateEnemies(0);
-  assert.equal(g.player.lives, 2);
+  assert.equal(g.player.hp, g.HP.max - g.HP.touch);
 });
 
 test('個頭衝出畫面底都唔會俾當成飛走咗刪走', () => {
   const { game, g, b } = serpent();
-  force(game, b, "serpentDash('A')");
+  force(game, b, "serpentDash('C')");
   let wentFar = false;
   for (let i = 0; i < 60 * 9.4; i++) {
     g.updateEnemies(DT);
@@ -177,7 +207,7 @@ test('第二階段轉色,而且要等呢招打完先轉', () => {
 
 test('打死嗰陣個頭喺畫面外,過場嘅爆炸都喺畫面入面', () => {
   const { game, g, b } = serpent();
-  force(game, b, "serpentDash('A')");
+  force(game, b, "serpentDash('C')");
   for (let i = 0; i < 60 * 9.3 && !(b.y > g.H + 60); i++) g.updateBoss(b, DT);
   assert.ok(b.y > g.H, '前提:個頭已經衝出畫面底');
   const k = Array.from(b.segY).findIndex((y, i) => i > 0 && y > 100 && y < g.H - 100);
@@ -205,4 +235,59 @@ test('畫圖唔會爆(每一招、每一個階段)', () => {
     g.updateEnemies(DT);
     if (i % 5 === 0) assert.doesNotThrow(() => g.draw());
   }
+});
+
+// ---------- 擊破演出 ----------
+
+// 打死星蛇:個頭喺畫面入面嗰陣打最後一槍
+function killSerpent() {
+  const { game, g, b } = serpent();
+  for (let i = 0; i < 60 * 3; i++) g.updateBoss(b, DT);
+  b.hp = 1;
+  g.bullets.push({ x: b.x, y: b.y, vx: 0, vy: 0, r: 4 });
+  g.updateBullets(DT);
+  assert.equal(g.game.state, 'finale');
+  return { game, g, b };
+}
+// 過場時間(原速秒數)換做幀數,除返星蛇自己嘅速度
+const deathFrames = (g, sec) => Math.ceil(60 * sec / g.finaleSpeedOf('serpent'));
+
+test('擊破:由條尾一節節爆上個頭', () => {
+  const { g } = serpent();
+  const n = g.SERPENT.nodes;
+  for (let k = 1; k < n - 1; k++) {
+    assert.ok(g.serpentDeathStart(k + 1) < g.serpentDeathStart(k), `第 ${k + 1} 節應該早過第 ${k} 節爆`);
+  }
+  assert.equal(g.serpentDeathStart(n - 1), g.SERPENT_DEATH.chain, '條尾第一個爆');
+  assert.ok(g.serpentDeathStart(1) < g.SERPENT_DEATH.headSwell, '成條身爆完先到個頭');
+});
+
+test('擊破:過場入面真係逐節爆(條尾先)', () => {
+  const { game, g, b } = killSerpent();
+  const n = g.SERPENT.nodes, D = g.SERPENT_DEATH;
+  game.step(deathFrames(g, g.serpentDeathStart(n - 1) + D.swell) + 1);
+  assert.ok(b.deathDone & (1 << (n - 1)), '條尾應該爆咗');
+  assert.ok(!(b.deathDone & (1 << 1)), '貼住個頭嗰節仲未爆');
+  game.step(deathFrames(g, D.burst - D.chain));
+  for (let k = 1; k < n; k++) assert.ok(b.deathDone & (1 << k), `第 ${k} 節應該爆咗`);
+});
+
+test('擊破:大爆炸先剷走 BOSS、掉寶;之後行得到落去,唔會卡死', () => {
+  const { game, g, b } = killSerpent();
+  const D = g.SERPENT_DEATH;
+  game.step(deathFrames(g, D.burst) - 3);
+  assert.ok(g.enemies.includes(b), '大爆炸之前條蛇仲喺度演緊');
+  assert.equal(g.powerups.length, 0);
+  game.step(6);
+  assert.ok(!g.enemies.includes(b), '大爆炸之後先消失');
+  assert.equal(g.powerups.length, 3, '照樣掉三件寶');
+  assert.doesNotThrow(() => game.step(deathFrames(g, D.pick - D.burst) + 6));   // step 每幀都會畫
+  assert.notEqual(g.game.state, 'finale', '過場一定要行完');
+});
+
+test('水晶核仲係用返通用過場', () => {
+  const { g } = serpent();
+  assert.equal(g.finaleOf('crystal'), g.FINALE);
+  assert.equal(g.finaleSpeedOf('crystal'), g.FINALE_SPEED);
+  assert.equal(g.finaleOf('serpent'), g.SERPENT_DEATH);
 });

@@ -60,7 +60,7 @@ test('有護盾擋到都一樣斷連擊', () => {
   killOne(game);
   g.hitPlayer();
   assert.equal(g.player.shield, 0, '護盾應該擋咗');
-  assert.equal(g.player.lives, 3, '唔應該扣命');
+  assert.equal(g.player.hp, g.player.maxHp, '唔應該扣血');
   assert.equal(g.game.combo, 0, '但連擊一樣要斷');
 });
 
@@ -93,7 +93,7 @@ test('最高紀錄跟晶體走', () => {
   const { g } = game;
   game.startClean();
   g.game.crystals = 12345;
-  g.player.lives = 1;
+  g.player.hp = 1;
   g.player.inv = 0;
   g.hitPlayer();
   assert.equal(g.game.state, 'over');

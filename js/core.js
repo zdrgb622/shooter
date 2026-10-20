@@ -17,7 +17,7 @@ const store = {
   set(k, v) { try { localStorage.setItem(k, v); } catch {} }  // set a localstorage value k
 };
 
-let player, bullets, ebullets, enemies, powerups, particles, game;
+let player, bullets, ebullets, enemies, powerups, particles, fx, game;   // fx = 一次性特效(擦彈火花、彗星火球)
 let highScore = +(store.get('stardrift_high') || 0);
 
 // 而家用緊邊種輸入:'key' 鍵盤 / 'touch' 手指 / 'pad' 手掣。
@@ -39,15 +39,34 @@ const COMBO_WINDOW = 3;      // 幾耐冇擊殺就斷(秒)
 const COMBO_STEP = .02;      // 每一個連擊加幾多倍
 const COMBO_MAX = 50;        // 連擊數上限,即最高 1 + 50 × .02 = 2 倍
 
+// 血量:取代以前嘅「幾條命」。中彈扣血 + 一段無敵時間,
+// 但唔會跌火力、唔會清擦彈、架機唔會飛返去起點。數值點調見 TUNING.md 第 1 節。
+const HP = {
+  max: 100,          // 開局血量(亦係上限,「強化機體」能力會加)
+  bullet: 20,        // 中一粒敵彈扣幾多
+  touch: 30,         // 撞到敵機 / BOSS 扣幾多
+  inv: 2.4,          // 中彈之後無敵幾耐(秒)—— 同以前死咗復活一樣
+  heal: 30,          // 執到 ♥ 補幾多
+  low: .3,           // 血少過幾多(比例)血條轉紅閃
+};
+
 function newGame() {  // set up a new game or restart
-  player = { x: W / 2, y: H - 110, r: 13, speed: 440, cool: 0, level: 1, lives: 3, shield: 0, inv: 2,
+  player = { x: W / 2, y: H - 110, r: 13, speed: 440, cool: 0, level: 1, shield: 0, inv: 2,
+             hp: HP.max, maxHp: HP.max,
+             hpShown: HP.max,    // 血條上面「啱啱扣咗」嗰截白色,慢慢追落去 hp
              abilities: {},      // { 能力 id: 等級 },每局清零
              fireRateMult: 1,    // 能力改射速用,1 = 原速
-             magnet: 0 };        // 能力改執道具範圍用,0 = 原本
-  bullets = []; ebullets = []; enemies = []; powerups = []; particles = [];
+             magnet: 0,          // 能力改執道具範圍用,0 = 原本
+             graze: 0,           // 擦彈儲咗幾多(到 GRAZE.full 就滿)
+             grazeFlash: 0,      // 啱啱擦到:儲氣圈閃一閃
+             fireHeld: false,    // 上一幀係咪開緊火 —— 由開火變停火嗰下先放
+             fullT: 9,           // 儲滿咗幾耐(秒)—— 白熱「爆」一下嗰陣用
+             dash: null };       // 彗星爆衝緊:{ t, x0, y0, dist, hit: [] },冇就 null
+  bullets = []; ebullets = []; enemies = []; powerups = []; particles = []; fx = [];
   game = { state: 'title', paused: false, crystals: 0, combo: 0, comboT: 0,
            wave: 0, queue: [], waveTime: 0, gap: 0,
-           bannerBoss: false, bannerT: 0, shake: 0, clearShots: false, rerolls: 0 };
+           bannerBoss: false, bannerT: 0, shake: 0, clearShots: false, rerolls: 0,
+           bombT: 9, bombX: 0, bombY: 0 };   // 炸彈衝擊波(bombT 由放嗰刻計起)
 }
 newGame();
 
