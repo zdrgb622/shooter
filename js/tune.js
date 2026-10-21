@@ -17,19 +17,26 @@ const TUNE_BOSS_HP = { crystal: 1, serpent: 1 };     // BOSS 血量倍數
 
 const TUNE_ROOTS = {
   PLAYER: TUNE_PLAYER, RUN: TUNE_RUN, BOSS_HP: TUNE_BOSS_HP,
-  HP, GRAZE, COMET, WAVE, SERPENT, SERPENT_LURK, SERPENT_CHARGE,
+  HP, GUN, GRAZE, COMET, WAVE, SERPENT, SERPENT_LURK, SERPENT_CHARGE,
 };
 
 // next: true = 下一局先生效(撳「重新開始」)
 const TUNE_GROUPS = [
   { name: '玩家', items: [
     { path: 'PLAYER.speed', label: '移動速度', unit: 'px/秒', min: 200, max: 800, step: 10 },
-    { path: 'PLAYER.level', label: '開局火力', min: 1, max: 5, step: 1, next: true },
+    { path: 'PLAYER.level', label: '開局火力', min: 1, max: GUN.maxLevel, step: 1, next: true },
     { path: 'HP.max', label: '開局血量', min: 40, max: 300, step: 5, next: true },
     { path: 'HP.bullet', label: '中一粒敵彈扣血', min: 0, max: 60, step: 1 },
     { path: 'HP.touch', label: '撞到敵機扣血', min: 0, max: 80, step: 1 },
     { path: 'HP.inv', label: '中彈後無敵', unit: '秒', min: 0, max: 5, step: .1 },
     { path: 'HP.heal', label: '執 ♥ 補血', min: 0, max: 100, step: 5 },
+  ] },
+  { name: '主炮集火', items: [
+    { path: 'GUN.spread', label: '郁緊時線與線角度', unit: '弧度', min: 0, max: .5, step: .01 },
+    { path: 'GUN.muzzle', label: '郁緊時出膛位相隔', unit: 'px', min: 0, max: 30, step: 1 },
+    { path: 'GUN.focusIn', label: '企定幾耐收埋', unit: '秒', min: .1, max: 2, step: .05 },
+    { path: 'GUN.focusOut', label: '一郁幾耐散開', unit: '秒', min: .05, max: 1.5, step: .05 },
+    { path: 'GUN.focusBonus', label: '集火傷害倍數', unit: '× 條數', min: 1, max: 3, step: .05 },
   ] },
   { name: '擦彈', items: [
     { path: 'GRAZE.ring', label: '擦彈範圍', unit: 'px', min: 0, max: 40, step: 1 },
