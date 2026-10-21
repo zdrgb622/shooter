@@ -13,6 +13,18 @@
 
 ---
 
+## 調數面板(唔使改 code)
+
+網址後面加 `?tune`(例如 `index.html?tune`),右上角會出「調數」掣,或者撳 T。
+一邊玩一邊拉,大部分即刻生效;標住「新一局」嘅要撳「重新開始」。
+
+- 改過嘅數值存喺呢部機嘅瀏覽器,reload 都仲喺度,**但冇寫入 code**,其他人玩唔會跟
+- 調啱咗撳「複製改動」,將段字貼俾 Claude(或者照住下面嘅「搜尋」自己改 code)
+- 面板有邊啲數值、範圍幾多,喺 `js/tune.js` 頂嘅 `TUNE_GROUPS` 加一行就得
+- `node tools/build-artifact.js` 會砌一個單一 HTML 檔,用嚟喺 Claude 做 artifact 試玩(面板預設開)
+
+---
+
 ## 0. 快速跳去某一波試
 
 檔案:`js/core.js`,搜尋 `const START_WAVE`

@@ -10,7 +10,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 
 const ROOT = path.join(__dirname, '..');
-const SCRIPTS = ['core', 'i18n', 'abilities', 'sprites', 'input', 'entities', 'bosses', 'render', 'ui', 'main'];
+const SCRIPTS = ['core', 'i18n', 'abilities', 'sprites', 'input', 'entities', 'bosses', 'render', 'ui', 'tune', 'main'];
 
 const noop = () => {};
 

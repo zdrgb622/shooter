@@ -231,8 +231,10 @@ const SERPENT_LURK = {
   wallGap: 40,        // 頭槌撞到牆:個頭中心停喺離畫面邊幾遠(頭尖 44px,咁個嘴啱啱插入牆)
   minReach: 140,      // 頭槌最少撞幾遠(玩家貼住佢都唔會得個縮頸)
 };
-const LURK_HB = ['watch', 'lock', 'pull', 'hold', 'lunge', 'stuck', 'back', 'rest']
-  .reduce((sum, k) => sum + SERPENT_LURK[k], 0);   // 一下頭槌由望到收要幾耐
+// 一下頭槌由望到收要幾耐。用 function 而唔係載入時計死,
+// 咁調數面板改 SERPENT_LURK 嘅時間,下一下頭槌就即刻跟。
+const lurkHB = () => ['watch', 'lock', 'pull', 'hold', 'lunge', 'stuck', 'back', 'rest']
+  .reduce((sum, k) => sum + SERPENT_LURK[k], 0);
 
 // 設計圖嘅路線(畫面座標,同遊戲一樣 480×720)。直接抄設計檔,方便對返。
 const SERPENT_PATHS = {
@@ -439,9 +441,10 @@ function serpentLurk(times) {
       if (t < T.swimIn) {
         b.stage = 'swim'; b.stageT = t;
         b.s = 1000 + (R - 1000) * easeOut(t / T.swimIn);
-      } else if ((t -= T.swimIn) < times * LURK_HB) {
-        const n = Math.floor(t / LURK_HB);
-        let u = t - n * LURK_HB;
+      } else if ((t -= T.swimIn) < times * lurkHB()) {
+        const HB = lurkHB();
+        const n = Math.floor(t / HB);
+        let u = t - n * HB;
         const bit = n * 4;
         if (u < T.watch) {
           b.stage = 'watch'; b.stageT = u;
@@ -487,7 +490,7 @@ function serpentLurk(times) {
           }
         }
       } else {
-        t -= times * LURK_HB;
+        t -= times * lurkHB();
         b.stage = 'swim'; b.stageT = t;
         b.s = R + (1000 - R) * easeIn(Math.min(1, t / T.swimOut));
         if (t >= T.swimOut) {

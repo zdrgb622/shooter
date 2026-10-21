@@ -53,6 +53,7 @@ js/entities.js    遊戲邏輯:波次、小怪、子彈、碰撞、過場、掉�
 js/bosses.js      BOSS 表:每隻 BOSS 嘅血、樣、招式同階段
 js/render.js      全部 canvas 繪圖:HUD、標題畫面、過場
 js/ui.js          能力選擇畫面（DOM,唔係畫喺 canvas）
+js/tune.js        調數面板(網址加 ?tune 先出),見 TUNING.md
 js/main.js        主迴圈:每幀 update(dt) → draw()
 ```
 

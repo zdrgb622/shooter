@@ -144,3 +144,138 @@ canvas {
   .pick-info { padding-right: 46px; }
 }
 
+
+/* ---------- 調數面板(js/tune.js,網址加 ?tune 先會出) ---------- */
+/* 貼住右邊嘅抽屜。手機上會遮住部分畫面,拉完撳 × 或者「調數」收埋。 */
+
+#tune-toggle {
+  position: fixed;
+  top: calc(10px + env(safe-area-inset-top, 0px));
+  right: calc(10px + env(safe-area-inset-right, 0px));
+  z-index: 21;
+  font: 600 13px/1 'Chakra Petch', 'Noto Sans TC', sans-serif;
+  letter-spacing: .5px;
+  color: var(--bg);
+  background: var(--cyan);
+  border: 0;
+  border-radius: 999px;
+  padding: 8px 14px;
+  cursor: pointer;
+}
+
+#tune {
+  position: fixed;
+  top: 0; right: 0; bottom: 0;
+  z-index: 20;
+  width: min(320px, 88vw);
+  display: flex; flex-direction: column;
+  background: rgba(18, 26, 58, .94);
+  border-left: 1px solid var(--line);
+  color: var(--text);
+  font: 13px/1.4 'Noto Sans TC', 'Chakra Petch', sans-serif;
+  padding-top: env(safe-area-inset-top, 0px);
+  padding-right: env(safe-area-inset-right, 0px);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  touch-action: pan-y;
+}
+#tune[hidden] { display: none; }
+
+#tune header {
+  display: flex; align-items: center; gap: 10px;
+  padding: 14px 16px 10px;
+  border-bottom: 1px solid var(--line);
+}
+#tune header strong { font: 700 15px/1 'Chakra Petch', 'Noto Sans TC', sans-serif; letter-spacing: 1px; }
+#tune-count { color: var(--accent); font-size: 12px; }
+#tune-close {
+  margin-left: auto;
+  width: 28px; height: 28px;
+  font-size: 18px; line-height: 1;
+  color: var(--muted); background: none;
+  border: 1px solid var(--line); border-radius: 6px;
+  cursor: pointer;
+}
+/* 留位俾右上角個「調數」掣 */
+#tune header { padding-right: 96px; }
+
+#tune-body {
+  flex: 1;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 4px 16px 12px;
+}
+
+#tune details { border-bottom: 1px solid rgba(58, 68, 128, .5); padding: 6px 0 10px; }
+#tune summary {
+  cursor: pointer;
+  padding: 6px 0;
+  font: 600 11px/1.2 'Chakra Petch', 'Noto Sans TC', sans-serif;
+  letter-spacing: 1.5px;
+  color: var(--muted);
+}
+
+.tune-row {
+  display: grid;
+  grid-template-columns: 1fr auto 22px;
+  align-items: center;
+  column-gap: 8px;
+  padding: 6px 0 2px;
+}
+.tune-row label { min-width: 0; }
+.tune-row em {
+  font-style: normal;
+  font-size: 10px;
+  color: var(--muted);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 0 4px;
+  margin-left: 6px;
+  vertical-align: 1px;
+}
+.tune-row output {
+  font: 500 12px/1 'Chakra Petch', "SF Mono", Menlo, monospace;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+}
+.tune-row.changed output { color: var(--accent); }
+.tune-row input { grid-column: 1 / -1; width: 100%; accent-color: var(--cyan); }
+.tune-row.changed input { accent-color: var(--accent); }
+
+.tune-reset {
+  width: 22px; height: 22px;
+  color: var(--accent); background: none;
+  border: 0; cursor: pointer;
+  font-size: 14px;
+  visibility: hidden;
+}
+.tune-row.changed .tune-reset { visibility: visible; }
+
+#tune footer {
+  display: flex; flex-wrap: wrap; gap: 8px;
+  padding: 12px 16px 14px;
+  border-top: 1px solid var(--line);
+}
+#tune footer button {
+  flex: 1 1 40%;
+  font: 600 13px/1 'Noto Sans TC', sans-serif;
+  padding: 10px 8px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: var(--card);
+  color: var(--text);
+  cursor: pointer;
+}
+#tune footer #tune-send { background: var(--accent); border-color: var(--accent); color: var(--bg); }
+#tune footer button:disabled { opacity: .5; }
+#tune footer button[hidden] { display: none; }
+#tune-msg { flex-basis: 100%; min-height: 1.4em; font-size: 12px; color: var(--cyan); }
+#tune-text {
+  flex-basis: 100%;
+  font: 11px/1.4 "SF Mono", Menlo, monospace;
+  color: var(--text); background: var(--bg);
+  border: 1px solid var(--line); border-radius: 6px;
+  padding: 6px;
+}
+#tune button:focus-visible, #tune input:focus-visible, #tune-toggle:focus-visible {
+  outline: 2px solid var(--accent); outline-offset: 2px;
+}
