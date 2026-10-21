@@ -93,7 +93,10 @@ function drawBullets() {
   for (const b of bullets) {
     ctx.save();
     ctx.translate(b.x, b.y);
-    ctx.scale(.9, .9);
+    if (b.big) {                      // 集火彈:粗啲、長啲、發光
+      ctx.shadowColor = ART.shot; ctx.shadowBlur = 10;
+      ctx.scale(1.5, 1.9);
+    } else ctx.scale(.9, .9);
     ctx.translate(-6, -10);
     drawShapes(SHOT, ART.shot);
     ctx.restore();
@@ -573,7 +576,7 @@ function drawBottomPanel() {
   ctx.textBaseline = 'top';
 
   const bw = Math.round(10 * HUD_BOT_K), bh = Math.round(9 * HUD_BOT_K), bgap = bw + 3;
-  for (let i = 0; i < 5; i++) {
+  for (let i = 0; i < GUN.maxLevel; i++) {
     ctx.fillStyle = i < player.level ? ART.hudHi : 'rgba(232,236,255,.18)';
     ctx.fillRect(x + i * bgap, y + heart + 6, bw, bh);
   }

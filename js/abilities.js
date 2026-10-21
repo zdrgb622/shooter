@@ -19,15 +19,15 @@ const OFFER_COUNT = 3;          // 一次出幾多張卡
 // icon 係 32×32 viewBox 嘅 SVG path,直接來自設計圖
 const ABILITIES = [
   {
-    id: 'spread', cat: '攻擊', rarity: '普通', max: 3,
-    name: { 'zh-Hant': '散射砲', 'zh-Hans': '散射炮', en: 'Spread Cannon' },
+    id: 'spread', cat: '攻擊', rarity: '普通', max: 2,
+    name: { 'zh-Hant': '多管砲', 'zh-Hans': '多管炮', en: 'Multi-Barrel' },
     desc: {
-      'zh-Hant': '子彈變成扇形,每級多一發。',
-      'zh-Hans': '子弹变成扇形,每级多一发。',
-      en: 'Fires a wider fan. One more bullet per level.',
+      'zh-Hant': '主炮多一條線,最多三條。',
+      'zh-Hans': '主炮多一条线,最多三条。',
+      en: 'One more cannon line, up to three.',
     },
     icon: 'M16 28 V6 M16 28 L7 8 M16 28 L25 8',
-    apply: () => { player.level = Math.min(5, player.level + 1); },
+    apply: () => { player.level = Math.min(GUN.maxLevel, player.level + 1); },
   },
   {
     id: 'rapid', cat: '攻擊', rarity: '普通', max: 3,

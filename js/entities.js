@@ -1,9 +1,12 @@
-const SPREAD = {
-  1: [0],
-  2: [-.05, .05],
-  3: [-.2, 0, .2],
-  4: [-.34, -.11, .11, .34],
-  5: [-.42, -.22, 0, .22, .42]
+// 主炮:P 幾多格就幾多條線(最多 3)。郁緊嗰陣係窄扇形打得闊;
+// 企定就好似儲力咁,幾條線慢慢收埋做一條集火光束,傷害有加成。數值點調見 TUNING.md 第 2 節。
+const GUN = {
+  maxLevel: 3,       // P 最多幾格 = 最多幾條線
+  spread: .17,       // 郁緊嗰陣,線與線之間差幾多(弧度,約 10°)
+  muzzle: 12,        // 郁緊嗰陣,線與線出膛位左右差幾多 px
+  focusIn: .6,       // 企定幾耐收埋做一條線(秒)
+  focusOut: .15,     // 一郁幾耐散返開(秒)
+  focusBonus: 1.3,   // 收埋之後:傷害 = 幾多條線 × 呢個數
 };
 
 // ---------- 波次 ----------
@@ -99,6 +102,9 @@ function updatePlayer(dt) {
   p.cool -= dt;
 
   const move = moveIntent(p, dt);
+  // 企定就慢慢收埋集火,一郁就散返開
+  p.focus = Math.hypot(move.x, move.y) > .05 ? Math.max(0, p.focus - dt / GUN.focusOut)
+                                              : Math.min(1, p.focus + dt / GUN.focusIn);
   p.x += move.x * p.speed * dt;
   p.y += move.y * p.speed * dt;
   p.x = clamp(p.x, p.r, W - p.r);
@@ -112,11 +118,18 @@ function updatePlayer(dt) {
 }
 
 function fire() {
-  for (const a of SPREAD[Math.min(player.level, 5)]) {
-    bullets.push({ x: player.x + Math.sin(a) * 24, y: player.y - 16,
-                   vx: Math.sin(a) * 640, vy: -Math.cos(a) * 640, r: 4 });
+  const p = player, n = Math.min(p.level, GUN.maxLevel), open = 1 - p.focus;
+  if (n > 1 && p.focus >= 1) {
+    // 收埋晒:一粒粗嘅集火彈,傷害 = 條數 × 加成
+    bullets.push({ x: p.x, y: p.y - 16, vx: 0, vy: -640, r: 6, dmg: n * GUN.focusBonus, big: true });
+  } else {
+    for (let i = 0; i < n; i++) {
+      const c = i - (n - 1) / 2, a = c * GUN.spread * open;
+      bullets.push({ x: p.x + c * GUN.muzzle * open, y: p.y - 16,
+                     vx: Math.sin(a) * 640, vy: -Math.cos(a) * 640, r: 4 });
+    }
   }
-  player.cool = Math.max(.05, (.16 - player.level * .012) * player.fireRateMult);
+  p.cool = Math.max(.05, (.16 - p.level * .012) * p.fireRateMult);
 }
 
 // 中彈 / 撞機。dmg 預設係一粒敵彈嘅傷害;撞機嗰邊傳 HP.touch。
@@ -453,7 +466,8 @@ function updateBullets(dt) {
       const dmg = enemyHit(e, b);
       if (dmg) {
         bullets.splice(i, 1);
-        e.hp -= dmg; e.flash = 1; e.lastDmg = dmg;
+        const hurt = dmg * (b.dmg || 1);   // 集火彈一粒當幾粒
+        e.hp -= hurt; e.flash = 1; e.lastDmg = hurt;
         e.hitX = b.x; e.hitY = b.y;     // 過場要知最後一槍喺邊(星蛇個頭可能喺畫面外)
         explode(b.x, b.y, '#cfe8ff', 4, 90);
         if (e.hp <= 0) killEnemy(e, j);
@@ -507,7 +521,7 @@ function updatePowerups(dt) {
     if (u.y > H + 30) { powerups.splice(i, 1); continue; }
     if (dist2(u, player) < (u.r + player.r + 6 + player.magnet) ** 2) {
       powerups.splice(i, 1);
-      if (u.kind === 'power') { player.level = Math.min(5, player.level + 1); game.crystals += 50; }
+      if (u.kind === 'power') { player.level = Math.min(GUN.maxLevel, player.level + 1); game.crystals += 50; }
       if (u.kind === 'shield') player.shield = Math.min(3, player.shield + 1);
       if (u.kind === 'life') player.hp = Math.min(player.maxHp, player.hp + HP.heal);
       explode(u.x, u.y, PU[u.kind].c, 16, 150);

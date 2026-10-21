@@ -61,7 +61,8 @@ function newGame() {  // set up a new game or restart
              grazeFlash: 0,      // 啱啱擦到:儲氣圈閃一閃
              fireHeld: false,    // 上一幀係咪開緊火 —— 由開火變停火嗰下先放
              fullT: 9,           // 儲滿咗幾耐(秒)—— 白熱「爆」一下嗰陣用
-             dash: null };       // 彗星爆衝緊:{ t, x0, y0, dist, hit: [] },冇就 null
+             dash: null,
+             focus: 0 };         // 主炮收埋幾多:0 = 散開(郁緊),1 = 一條集火光束(企定)       // 彗星爆衝緊:{ t, x0, y0, dist, hit: [] },冇就 null
   bullets = []; ebullets = []; enemies = []; powerups = []; particles = []; fx = [];
   game = { state: 'title', paused: false, crystals: 0, combo: 0, comboT: 0,
            wave: 0, queue: [], waveTime: 0, gap: 0,
